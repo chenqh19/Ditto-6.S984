@@ -1,7 +1,7 @@
         -:    0:Source:util.c
         -:    0:Graph:util.gcno
         -:    0:Data:util.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:#include <stdio.h>
         -:    2:#include <assert.h>
         -:    3:#include <ctype.h>
@@ -15,19 +15,19 @@
         -:   11:static char *uriencode_map[256];
         -:   12:static char uriencode_str[768];
         -:   13:
-      117:   14:void uriencode_init(void) {
-      117:   15:    int x;
-      117:   16:    char *str = uriencode_str;
-    30069:   17:    for (x = 0; x < 256; x++) {
-    29952:   18:        if (isalnum(x) || x == '-' || x == '.' || x == '_' || x == '~') {
-     7722:   19:            uriencode_map[x] = NULL;
+      118:   14:void uriencode_init(void) {
+      118:   15:    int x;
+      118:   16:    char *str = uriencode_str;
+    30326:   17:    for (x = 0; x < 256; x++) {
+    30208:   18:        if (isalnum(x) || x == '-' || x == '.' || x == '_' || x == '~') {
+     7788:   19:            uriencode_map[x] = NULL;
         -:   20:        } else {
-    22230:   21:            snprintf(str, 4, "%%%02hhX", (unsigned char)x);
-    22230:   22:            uriencode_map[x] = str;
-    22230:   23:            str += 3; /* lobbing off the \0 is fine */
+    22420:   21:            snprintf(str, 4, "%%%02hhX", (unsigned char)x);
+    22420:   22:            uriencode_map[x] = str;
+    22420:   23:            str += 3; /* lobbing off the \0 is fine */
         -:   24:        }
         -:   25:    }
-      117:   26:}
+      118:   26:}
         -:   27:
    151261:   28:bool uriencode(const char *src, char *dst, const size_t srclen, const size_t dstlen) {
    151261:   29:    int x;
@@ -50,13 +50,13 @@
         -:   46:/* Avoid warnings on solaris, where isspace() is an index into an array, and gcc uses signed chars */
         -:   47:#define xisspace(c) isspace((unsigned char)c)
         -:   48:
-      650:   49:bool safe_strtoull(const char *str, uint64_t *out) {
-     650*:   50:    assert(out != NULL);
-      650:   51:    errno = 0;
-      650:   52:    *out = 0;
-      650:   53:    char *endptr;
-      650:   54:    unsigned long long ull = strtoull(str, &endptr, 10);
-      650:   55:    if ((errno == ERANGE) || (str == endptr)) {
+      649:   49:bool safe_strtoull(const char *str, uint64_t *out) {
+     649*:   50:    assert(out != NULL);
+      649:   51:    errno = 0;
+      649:   52:    *out = 0;
+      649:   53:    char *endptr;
+      649:   54:    unsigned long long ull = strtoull(str, &endptr, 10);
+      649:   55:    if ((errno == ERANGE) || (str == endptr)) {
         -:   56:        return false;
         -:   57:    }
         -:   58:
@@ -224,46 +224,46 @@
         -:  220:    }
         -:  221:}
         -:  222:
-        2:  223:void vperror(const char *fmt, ...) {
-        2:  224:    int old_errno = errno;
-        2:  225:    char buf[1024];
-        2:  226:    va_list ap;
+        1:  223:void vperror(const char *fmt, ...) {
+        1:  224:    int old_errno = errno;
+        1:  225:    char buf[1024];
+        1:  226:    va_list ap;
         -:  227:
-        2:  228:    va_start(ap, fmt);
-        2:  229:    if (vsnprintf(buf, sizeof(buf), fmt, ap) == -1) {
+        1:  228:    va_start(ap, fmt);
+        1:  229:    if (vsnprintf(buf, sizeof(buf), fmt, ap) == -1) {
     #####:  230:        buf[sizeof(buf) - 1] = '\0';
         -:  231:    }
-        2:  232:    va_end(ap);
+        1:  232:    va_end(ap);
         -:  233:
-        2:  234:    errno = old_errno;
+        1:  234:    errno = old_errno;
         -:  235:
-        2:  236:    perror(buf);
-        2:  237:}
+        1:  236:    perror(buf);
+        1:  237:}
         -:  238:
         -:  239:#ifndef HAVE_HTONLL
-    58632:  240:static uint64_t mc_swap64(uint64_t in) {
+    58842:  240:static uint64_t mc_swap64(uint64_t in) {
         -:  241:#ifdef ENDIAN_LITTLE
         -:  242:    /* Little endian, flip the bytes around until someone makes a faster/better
         -:  243:    * way to do this. */
-    58632:  244:    int64_t rv = 0;
-    58632:  245:    int i = 0;
-   527688:  246:     for(i = 0; i<8; i++) {
-   469056:  247:        rv = (rv << 8) | (in & 0xff);
-   469056:  248:        in >>= 8;
+    58842:  244:    int64_t rv = 0;
+    58842:  245:    int i = 0;
+   529578:  246:     for(i = 0; i<8; i++) {
+   470736:  247:        rv = (rv << 8) | (in & 0xff);
+   470736:  248:        in >>= 8;
         -:  249:     }
-    58632:  250:    return rv;
+    58842:  250:    return rv;
         -:  251:#else
         -:  252:    /* big-endian machines don't need byte swapping */
         -:  253:    return in;
         -:  254:#endif
         -:  255:}
         -:  256:
-    38827:  257:uint64_t ntohll(uint64_t val) {
-    38827:  258:   return mc_swap64(val);
+    38918:  257:uint64_t ntohll(uint64_t val) {
+    38918:  258:   return mc_swap64(val);
         -:  259:}
         -:  260:
-    19805:  261:uint64_t htonll(uint64_t val) {
-    19805:  262:   return mc_swap64(val);
+    19924:  261:uint64_t htonll(uint64_t val) {
+    19924:  262:   return mc_swap64(val);
         -:  263:}
         -:  264:#endif
         -:  265:

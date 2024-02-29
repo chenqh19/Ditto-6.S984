@@ -1,7 +1,7 @@
         -:    0:Source:thread.c
         -:    0:Graph:thread.gcno
         -:    0:Data:thread.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
         -:    2:/*
         -:    3: * Thread management for memcached.
@@ -122,41 +122,41 @@
         -:  118: * without first locking and removing from the LRU.
         -:  119: */
         -:  120:
- 1069876*:  121:void item_lock(uint32_t hv) {
-   72352*:  122:    mutex_lock(&item_locks[hv & hashmask(item_lock_hashpower)]);
-    72352:  123:}
+ 1069778*:  121:void item_lock(uint32_t hv) {
+   72252*:  122:    mutex_lock(&item_locks[hv & hashmask(item_lock_hashpower)]);
+    72252:  123:}
         -:  124:
-   710237:  125:void *item_trylock(uint32_t hv) {
-   710237:  126:    pthread_mutex_t *lock = &item_locks[hv & hashmask(item_lock_hashpower)];
-   710237:  127:    if (pthread_mutex_trylock(lock) == 0) {
-   710107:  128:        return lock;
+   710857:  125:void *item_trylock(uint32_t hv) {
+   710857:  126:    pthread_mutex_t *lock = &item_locks[hv & hashmask(item_lock_hashpower)];
+   710857:  127:    if (pthread_mutex_trylock(lock) == 0) {
+   710729:  128:        return lock;
         -:  129:    }
         -:  130:    return NULL;
         -:  131:}
         -:  132:
-   648296:  133:void item_trylock_unlock(void *lock) {
-   648296:  134:    mutex_unlock((pthread_mutex_t *) lock);
-   648296:  135:}
+   647729:  133:void item_trylock_unlock(void *lock) {
+   647729:  134:    mutex_unlock((pthread_mutex_t *) lock);
+   647729:  135:}
         -:  136:
- 1131687*:  137:void item_unlock(uint32_t hv) {
-  276371*:  138:    mutex_unlock(&item_locks[hv & hashmask(item_lock_hashpower)]);
-   276371:  139:}
+ 1132778*:  137:void item_unlock(uint32_t hv) {
+  277465*:  138:    mutex_unlock(&item_locks[hv & hashmask(item_lock_hashpower)]);
+   277465:  139:}
         -:  140:
-      118:  141:static void wait_for_thread_registration(int nthreads) {
-      338:  142:    while (init_count < nthreads) {
-      230:  143:        pthread_cond_wait(&init_cond, &init_lock);
+      119:  141:static void wait_for_thread_registration(int nthreads) {
+      346:  142:    while (init_count < nthreads) {
+      237:  143:        pthread_cond_wait(&init_cond, &init_lock);
         -:  144:    }
         -:  145:}
         -:  146:
-      512:  147:static void register_thread_initialized(void) {
-      512:  148:    pthread_mutex_lock(&init_lock);
-      512:  149:    init_count++;
-      512:  150:    pthread_cond_signal(&init_cond);
-      512:  151:    pthread_mutex_unlock(&init_lock);
+      516:  147:static void register_thread_initialized(void) {
+      516:  148:    pthread_mutex_lock(&init_lock);
+      516:  149:    init_count++;
+      516:  150:    pthread_cond_signal(&init_cond);
+      516:  151:    pthread_mutex_unlock(&init_lock);
         -:  152:    /* Force worker threads to pile up if someone wants us to */
-      512:  153:    pthread_mutex_lock(&worker_hang_lock);
-      512:  154:    pthread_mutex_unlock(&worker_hang_lock);
-      512:  155:}
+      516:  153:    pthread_mutex_lock(&worker_hang_lock);
+      516:  154:    pthread_mutex_unlock(&worker_hang_lock);
+      516:  155:}
         -:  156:
         -:  157:/* Must not be called with any deeper locks held */
         2:  158:void pause_threads(enum pause_thread_types type) {
@@ -278,15 +278,15 @@
         -:  274:/*
         -:  275: * Initializes a connection queue.
         -:  276: */
-      500:  277:static void cq_init(CQ *cq) {
-      500:  278:    pthread_mutex_init(&cq->lock, NULL);
-      500:  279:    STAILQ_INIT(&cq->head);
-      500:  280:    cq->cache = cache_create("cq", sizeof(CQ_ITEM), sizeof(char *));
-      500:  281:    if (cq->cache == NULL) {
+      504:  277:static void cq_init(CQ *cq) {
+      504:  278:    pthread_mutex_init(&cq->lock, NULL);
+      504:  279:    STAILQ_INIT(&cq->head);
+      504:  280:    cq->cache = cache_create("cq", sizeof(CQ_ITEM), sizeof(char *));
+      504:  281:    if (cq->cache == NULL) {
     #####:  282:        fprintf(stderr, "Failed to create connection queue cache\n");
     #####:  283:        exit(EXIT_FAILURE);
         -:  284:    }
-      500:  285:}
+      504:  285:}
         -:  286:
         -:  287:/*
         -:  288: * Looks for an item on a connection queue, but doesn't block if there isn't
@@ -380,20 +380,20 @@
         -:  376:/*
         -:  377: * Creates a worker thread.
         -:  378: */
-      500:  379:static void create_worker(void *(*func)(void *), void *arg) {
-      500:  380:    pthread_attr_t  attr;
-      500:  381:    int             ret;
+      504:  379:static void create_worker(void *(*func)(void *), void *arg) {
+      504:  380:    pthread_attr_t  attr;
+      504:  381:    int             ret;
         -:  382:
-      500:  383:    pthread_attr_init(&attr);
+      504:  383:    pthread_attr_init(&attr);
         -:  384:
-      500:  385:    if ((ret = pthread_create(&((LIBEVENT_THREAD*)arg)->thread_id, &attr, func, arg)) != 0) {
+      504:  385:    if ((ret = pthread_create(&((LIBEVENT_THREAD*)arg)->thread_id, &attr, func, arg)) != 0) {
     #####:  386:        fprintf(stderr, "Can't create thread: %s\n",
         -:  387:                strerror(ret));
     #####:  388:        exit(1);
         -:  389:    }
         -:  390:
-      500:  391:    thread_setname(((LIBEVENT_THREAD*)arg)->thread_id, "mc-worker");
-      500:  392:}
+      504:  391:    thread_setname(((LIBEVENT_THREAD*)arg)->thread_id, "mc-worker");
+      504:  392:}
         -:  393:
         -:  394:/*
         -:  395: * Sets whether or not we accept new connections.
@@ -405,68 +405,68 @@
     #####:  401:}
         -:  402:/****************************** LIBEVENT THREADS *****************************/
         -:  403:
-     1000:  404:static void setup_thread_notify(LIBEVENT_THREAD *me, struct thread_notify *tn,
+     1008:  404:static void setup_thread_notify(LIBEVENT_THREAD *me, struct thread_notify *tn,
         -:  405:        void(*cb)(int, short, void *)) {
         -:  406:#ifdef HAVE_EVENTFD
-     1000:  407:    event_set(&tn->notify_event, tn->notify_event_fd,
+     1008:  407:    event_set(&tn->notify_event, tn->notify_event_fd,
         -:  408:              EV_READ | EV_PERSIST, cb, me);
         -:  409:#else
         -:  410:    event_set(&tn->notify_event, tn->notify_receive_fd,
         -:  411:              EV_READ | EV_PERSIST, cb, me);
         -:  412:#endif
-     1000:  413:    event_base_set(me->base, &tn->notify_event);
+     1008:  413:    event_base_set(me->base, &tn->notify_event);
         -:  414:
-     1000:  415:    if (event_add(&tn->notify_event, 0) == -1) {
+     1008:  415:    if (event_add(&tn->notify_event, 0) == -1) {
     #####:  416:        fprintf(stderr, "Can't monitor libevent notify pipe\n");
     #####:  417:        exit(1);
         -:  418:    }
-     1000:  419:}
+     1008:  419:}
         -:  420:
         -:  421:/*
         -:  422: * Set up a thread's information.
         -:  423: */
-      500:  424:static void setup_thread(LIBEVENT_THREAD *me) {
+      504:  424:static void setup_thread(LIBEVENT_THREAD *me) {
         -:  425:#if defined(LIBEVENT_VERSION_NUMBER) && LIBEVENT_VERSION_NUMBER >= 0x02000101
-      500:  426:    struct event_config *ev_config;
-      500:  427:    ev_config = event_config_new();
-      500:  428:    event_config_set_flag(ev_config, EVENT_BASE_FLAG_NOLOCK);
-      500:  429:    me->base = event_base_new_with_config(ev_config);
-      500:  430:    event_config_free(ev_config);
+      504:  426:    struct event_config *ev_config;
+      504:  427:    ev_config = event_config_new();
+      504:  428:    event_config_set_flag(ev_config, EVENT_BASE_FLAG_NOLOCK);
+      504:  429:    me->base = event_base_new_with_config(ev_config);
+      504:  430:    event_config_free(ev_config);
         -:  431:#else
         -:  432:    me->base = event_init();
         -:  433:#endif
         -:  434:
-      500:  435:    if (! me->base) {
+      504:  435:    if (! me->base) {
     #####:  436:        fprintf(stderr, "Can't allocate event base\n");
     #####:  437:        exit(1);
         -:  438:    }
         -:  439:
         -:  440:    /* Listen for notifications from other threads */
-      500:  441:    setup_thread_notify(me, &me->n, thread_libevent_process);
-      500:  442:    setup_thread_notify(me, &me->ion, thread_libevent_ionotify);
-      500:  443:    pthread_mutex_init(&me->ion_lock, NULL);
-      500:  444:    STAILQ_INIT(&me->ion_head);
+      504:  441:    setup_thread_notify(me, &me->n, thread_libevent_process);
+      504:  442:    setup_thread_notify(me, &me->ion, thread_libevent_ionotify);
+      504:  443:    pthread_mutex_init(&me->ion_lock, NULL);
+      504:  444:    STAILQ_INIT(&me->ion_head);
         -:  445:
-      500:  446:    me->ev_queue = malloc(sizeof(struct conn_queue));
-      500:  447:    if (me->ev_queue == NULL) {
+      504:  446:    me->ev_queue = malloc(sizeof(struct conn_queue));
+      504:  447:    if (me->ev_queue == NULL) {
     #####:  448:        perror("Failed to allocate memory for connection queue");
     #####:  449:        exit(EXIT_FAILURE);
         -:  450:    }
-      500:  451:    cq_init(me->ev_queue);
+      504:  451:    cq_init(me->ev_queue);
         -:  452:
-      500:  453:    if (pthread_mutex_init(&me->stats.mutex, NULL) != 0) {
+      504:  453:    if (pthread_mutex_init(&me->stats.mutex, NULL) != 0) {
     #####:  454:        perror("Failed to initialize mutex");
     #####:  455:        exit(EXIT_FAILURE);
         -:  456:    }
         -:  457:
-      500:  458:    me->rbuf_cache = cache_create("rbuf", READ_BUFFER_SIZE, sizeof(char *));
-      500:  459:    if (me->rbuf_cache == NULL) {
+      504:  458:    me->rbuf_cache = cache_create("rbuf", READ_BUFFER_SIZE, sizeof(char *));
+      504:  459:    if (me->rbuf_cache == NULL) {
     #####:  460:        fprintf(stderr, "Failed to create read buffer cache\n");
     #####:  461:        exit(EXIT_FAILURE);
         -:  462:    }
         -:  463:    // Note: we were cleanly passing in num_threads before, but this now
         -:  464:    // relies on settings globals too much.
-      500:  465:    if (settings.read_buf_mem_limit) {
+      504:  465:    if (settings.read_buf_mem_limit) {
        32:  466:        int limit = settings.read_buf_mem_limit / settings.num_threads;
        32:  467:        if (limit < READ_BUFFER_SIZE) {
         -:  468:            limit = 1;
@@ -476,8 +476,8 @@
        32:  472:        cache_set_limit(me->rbuf_cache, limit);
         -:  473:    }
         -:  474:
-      500:  475:    me->io_cache = cache_create("io", sizeof(io_pending_t), sizeof(char*));
-      500:  476:    if (me->io_cache == NULL) {
+      504:  475:    me->io_cache = cache_create("io", sizeof(io_pending_t), sizeof(char*));
+      504:  476:    if (me->io_cache == NULL) {
     #####:  477:        fprintf(stderr, "Failed to create IO object cache\n");
     #####:  478:        exit(EXIT_FAILURE);
         -:  479:    }
@@ -492,7 +492,7 @@
         -:  488:#endif
         -:  489:#ifdef EXTSTORE
         -:  490:    // me->storage is set just before this function is called.
-      500:  491:    if (me->storage) {
+      504:  491:    if (me->storage) {
        40:  492:        thread_io_queue_add(me, IO_QUEUE_EXTSTORE, me->storage,
         -:  493:            storage_submit_cb);
         -:  494:    }
@@ -506,31 +506,31 @@
         -:  502:        proxy_thread_init(settings.proxy_ctx, me);
         -:  503:    }
         -:  504:#endif
-      500:  505:    thread_io_queue_add(me, IO_QUEUE_NONE, NULL, NULL);
-      500:  506:}
+      504:  505:    thread_io_queue_add(me, IO_QUEUE_NONE, NULL, NULL);
+      504:  506:}
         -:  507:
         -:  508:/*
         -:  509: * Worker thread: main event loop
         -:  510: */
-      500:  511:static void *worker_libevent(void *arg) {
-      500:  512:    LIBEVENT_THREAD *me = arg;
+      504:  511:static void *worker_libevent(void *arg) {
+      504:  512:    LIBEVENT_THREAD *me = arg;
         -:  513:
         -:  514:    /* Any per-thread setup can happen here; memcached_thread_init() will block until
         -:  515:     * all threads have finished initializing.
         -:  516:     */
-      500:  517:    me->l = logger_create();
-      500:  518:    me->lru_bump_buf = item_lru_bump_buf_create();
-      500:  519:    if (me->l == NULL || me->lru_bump_buf == NULL) {
+      504:  517:    me->l = logger_create();
+      504:  518:    me->lru_bump_buf = item_lru_bump_buf_create();
+      504:  519:    if (me->l == NULL || me->lru_bump_buf == NULL) {
     #####:  520:        abort();
         -:  521:    }
         -:  522:
-      500:  523:    if (settings.drop_privileges) {
-      500:  524:        drop_worker_privileges();
+      504:  523:    if (settings.drop_privileges) {
+      504:  524:        drop_worker_privileges();
         -:  525:    }
         -:  526:
-      500:  527:    register_thread_initialized();
+      504:  527:    register_thread_initialized();
         -:  528:
-      500:  529:    event_base_loop(me->base, 0);
+      504:  529:    event_base_loop(me->base, 0);
         -:  530:
         -:  531:    // same mechanism used to watch for all threads exiting.
         8:  532:    register_thread_initialized();
@@ -585,16 +585,16 @@
         -:  581: * Processes an incoming "connection event" item. This is called when
         -:  582: * input arrives on the libevent wakeup pipe.
         -:  583: */
-     2152:  584:static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) {
-     2152:  585:    LIBEVENT_THREAD *me = arg;
-     2152:  586:    CQ_ITEM *item;
-     2152:  587:    conn *c;
-     2152:  588:    uint64_t ev_count = 0; // max number of events to loop through this run.
+     2179:  584:static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) {
+     2179:  585:    LIBEVENT_THREAD *me = arg;
+     2179:  586:    CQ_ITEM *item;
+     2179:  587:    conn *c;
+     2179:  588:    uint64_t ev_count = 0; // max number of events to loop through this run.
         -:  589:#ifdef HAVE_EVENTFD
         -:  590:    // NOTE: unlike pipe we aren't limiting the number of events per read.
         -:  591:    // However we do limit the number of queue pulls to what the count was at
         -:  592:    // the time of this function firing.
-     2152:  593:    if (read(fd, &ev_count, sizeof(uint64_t)) != sizeof(uint64_t)) {
+     2179:  593:    if (read(fd, &ev_count, sizeof(uint64_t)) != sizeof(uint64_t)) {
     #####:  594:        if (settings.verbose > 0)
     #####:  595:            fprintf(stderr, "Can't read from libevent pipe\n");
     #####:  596:        return;
@@ -610,7 +610,7 @@
         -:  606:    }
         -:  607:#endif
         -:  608:
-     4382:  609:    for (int x = 0; x < ev_count; x++) {
+     4409:  609:    for (int x = 0; x < ev_count; x++) {
      2230:  610:        item = cq_pop(me->ev_queue);
      2230:  611:        if (item == NULL) {
         -:  612:            return;
@@ -679,12 +679,12 @@
         -:  675:// Interface is slightly different on various platforms.
         -:  676:// On linux, at least, the len limit is 16 bytes.
         -:  677:#define THR_NAME_MAXLEN 16
-     1089:  678:void thread_setname(pthread_t thread, const char *name) {
-    1089*:  679:assert(strlen(name) < THR_NAME_MAXLEN);
+     1098:  678:void thread_setname(pthread_t thread, const char *name) {
+    1098*:  679:assert(strlen(name) < THR_NAME_MAXLEN);
         -:  680:#if defined(__linux__)
-     1089:  681:pthread_setname_np(thread, name);
+     1098:  681:pthread_setname_np(thread, name);
         -:  682:#endif
-     1089:  683:}
+     1098:  683:}
         -:  684:#undef THR_NAME_MAXLEN
         -:  685:
         -:  686:// NOTE: need better encapsulation.
@@ -867,46 +867,46 @@
         -:  863:/*
         -:  864: * Allocates a new item.
         -:  865: */
-   327746:  866:item *item_alloc(const char *key, size_t nkey, client_flags_t flags, rel_time_t exptime, int nbytes) {
-   327746:  867:    item *it;
+   327743:  866:item *item_alloc(const char *key, size_t nkey, client_flags_t flags, rel_time_t exptime, int nbytes) {
+   327743:  867:    item *it;
         -:  868:    /* do_item_alloc handles its own locks */
-   327746:  869:    it = do_item_alloc(key, nkey, flags, exptime, nbytes);
-   327746:  870:    return it;
+   327743:  869:    it = do_item_alloc(key, nkey, flags, exptime, nbytes);
+   327743:  870:    return it;
         -:  871:}
         -:  872:
         -:  873:/*
         -:  874: * Returns an item if it hasn't been marked as expired,
         -:  875: * lazy-expiring as needed.
         -:  876: */
-   139354:  877:item *item_get(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update) {
-   139354:  878:    item *it;
-   139354:  879:    uint32_t hv;
-   139354:  880:    hv = hash(key, nkey);
-   139354:  881:    item_lock(hv);
-   139354:  882:    it = do_item_get(key, nkey, hv, t, do_update);
-   139354:  883:    item_unlock(hv);
-   139354:  884:    return it;
+   139358:  877:item *item_get(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update) {
+   139358:  878:    item *it;
+   139358:  879:    uint32_t hv;
+   139358:  880:    hv = hash(key, nkey);
+   139358:  881:    item_lock(hv);
+   139358:  882:    it = do_item_get(key, nkey, hv, t, do_update);
+   139358:  883:    item_unlock(hv);
+   139358:  884:    return it;
         -:  885:}
         -:  886:
         -:  887:// returns an item with the item lock held.
         -:  888:// lock will still be held even if return is NULL, allowing caller to replace
         -:  889:// an item atomically if desired.
-   142208:  890:item *item_get_locked(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update, uint32_t *hv) {
-   142208:  891:    item *it;
-   142208:  892:    *hv = hash(key, nkey);
-   142208:  893:    item_lock(*hv);
-   142208:  894:    it = do_item_get(key, nkey, *hv, t, do_update);
-   142208:  895:    return it;
+   142213:  890:item *item_get_locked(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update, uint32_t *hv) {
+   142213:  891:    item *it;
+   142213:  892:    *hv = hash(key, nkey);
+   142213:  893:    item_lock(*hv);
+   142213:  894:    it = do_item_get(key, nkey, *hv, t, do_update);
+   142213:  895:    return it;
         -:  896:}
         -:  897:
-     2099:  898:item *item_touch(const char *key, size_t nkey, uint32_t exptime, LIBEVENT_THREAD *t) {
-     2099:  899:    item *it;
-     2099:  900:    uint32_t hv;
-     2099:  901:    hv = hash(key, nkey);
-     2099:  902:    item_lock(hv);
-     2099:  903:    it = do_item_touch(key, nkey, exptime, hv, t);
-     2099:  904:    item_unlock(hv);
-     2099:  905:    return it;
+     2102:  898:item *item_touch(const char *key, size_t nkey, uint32_t exptime, LIBEVENT_THREAD *t) {
+     2102:  899:    item *it;
+     2102:  900:    uint32_t hv;
+     2102:  901:    hv = hash(key, nkey);
+     2102:  902:    item_lock(hv);
+     2102:  903:    it = do_item_touch(key, nkey, exptime, hv, t);
+     2102:  904:    item_unlock(hv);
+     2102:  905:    return it;
         -:  906:}
         -:  907:
         -:  908:/*
@@ -927,22 +927,22 @@
         -:  923: * Decrements the reference count on an item and adds it to the freelist if
         -:  924: * needed.
         -:  925: */
-   386071:  926:void item_remove(item *item) {
-   386071:  927:    uint32_t hv;
-   386071:  928:    hv = hash(ITEM_key(item), item->nkey);
+   386067:  926:void item_remove(item *item) {
+   386067:  927:    uint32_t hv;
+   386067:  928:    hv = hash(ITEM_key(item), item->nkey);
         -:  929:
-   386071:  930:    item_lock(hv);
-   386071:  931:    do_item_remove(item);
-   386071:  932:    item_unlock(hv);
-   386071:  933:}
+   386067:  930:    item_lock(hv);
+   386067:  931:    do_item_remove(item);
+   386067:  932:    item_unlock(hv);
+   386067:  933:}
         -:  934:
         -:  935:/*
         -:  936: * Replaces one item with another in the hashtable.
         -:  937: * Unprotected by a mutex lock since the core server does not require
         -:  938: * it to be thread-safe.
         -:  939: */
-    58727:  940:int item_replace(item *old_it, item *new_it, const uint32_t hv) {
-    58727:  941:    return do_item_replace(old_it, new_it, hv);
+    58731:  940:int item_replace(item *old_it, item *new_it, const uint32_t hv) {
+    58731:  941:    return do_item_replace(old_it, new_it, hv);
         -:  942:}
         -:  943:
         -:  944:/*
@@ -959,42 +959,42 @@
         -:  955:/*
         -:  956: * Does arithmetic on a numeric item value.
         -:  957: */
-      400:  958:enum delta_result_type add_delta(LIBEVENT_THREAD *t, const char *key,
+      397:  958:enum delta_result_type add_delta(LIBEVENT_THREAD *t, const char *key,
         -:  959:                                 const size_t nkey, bool incr,
         -:  960:                                 const int64_t delta, char *buf,
         -:  961:                                 uint64_t *cas) {
-      400:  962:    enum delta_result_type ret;
-      400:  963:    uint32_t hv;
+      397:  962:    enum delta_result_type ret;
+      397:  963:    uint32_t hv;
         -:  964:
-      400:  965:    hv = hash(key, nkey);
-      400:  966:    item_lock(hv);
-      400:  967:    ret = do_add_delta(t, key, nkey, incr, delta, buf, cas, hv, NULL);
-      400:  968:    item_unlock(hv);
-      400:  969:    return ret;
+      397:  965:    hv = hash(key, nkey);
+      397:  966:    item_lock(hv);
+      397:  967:    ret = do_add_delta(t, key, nkey, incr, delta, buf, cas, hv, NULL);
+      397:  968:    item_unlock(hv);
+      397:  969:    return ret;
         -:  970:}
         -:  971:
         -:  972:/*
         -:  973: * Stores an item in the cache (high level, obeys set/add/replace semantics)
         -:  974: */
-   327377:  975:enum store_item_type store_item(item *item, int comm, LIBEVENT_THREAD *t, int *nbytes, uint64_t *cas, bool cas_stale) {
-   327377:  976:    enum store_item_type ret;
-   327377:  977:    uint32_t hv;
+   327374:  975:enum store_item_type store_item(item *item, int comm, LIBEVENT_THREAD *t, int *nbytes, uint64_t *cas, bool cas_stale) {
+   327374:  976:    enum store_item_type ret;
+   327374:  977:    uint32_t hv;
         -:  978:
-   327377:  979:    hv = hash(ITEM_key(item), item->nkey);
-   327377:  980:    item_lock(hv);
-   327377:  981:    ret = do_store_item(item, comm, t, hv, nbytes, cas, cas_stale);
-   327377:  982:    item_unlock(hv);
-   327377:  983:    return ret;
+   327374:  979:    hv = hash(ITEM_key(item), item->nkey);
+   327374:  980:    item_lock(hv);
+   327374:  981:    ret = do_store_item(item, comm, t, hv, nbytes, cas, cas_stale);
+   327374:  982:    item_unlock(hv);
+   327374:  983:    return ret;
         -:  984:}
         -:  985:
         -:  986:/******************************* GLOBAL STATS ******************************/
         -:  987:
-  640505*:  988:void STATS_LOCK(void) {
-  640505*:  989:    pthread_mutex_lock(&stats_lock);
-   640505:  990:}
+  640567*:  988:void STATS_LOCK(void) {
+  640567*:  989:    pthread_mutex_lock(&stats_lock);
+   640567:  990:}
         -:  991:
-  640505*:  992:void STATS_UNLOCK(void) {
-  640505*:  993:    pthread_mutex_unlock(&stats_lock);
+  640567*:  992:void STATS_UNLOCK(void) {
+  640567*:  993:    pthread_mutex_unlock(&stats_lock);
     #####:  994:}
         -:  995:
         3:  996:void threadlocal_stats_reset(void) {
@@ -1060,17 +1060,17 @@
         -: 1056:    }
      5378: 1057:}
         -: 1058:
-     3796: 1059:void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out) {
-     3796: 1060:    int sid;
+     3797: 1059:void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out) {
+     3797: 1060:    int sid;
         -: 1061:
-     3796: 1062:    memset(out, 0, sizeof(*out));
+     3797: 1062:    memset(out, 0, sizeof(*out));
         -: 1063:
-   246740: 1064:    for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
+   246805: 1064:    for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
         -: 1065:#define X(name) out->name += stats->slab_stats[sid].name;
-   242944: 1066:        SLAB_STATS_FIELDS
+   243008: 1066:        SLAB_STATS_FIELDS
         -: 1067:#undef X
         -: 1068:    }
-     3796: 1069:}
+     3797: 1069:}
         -: 1070:
         -: 1071:static void memcached_thread_notify_init(struct thread_notify *tn) {
         -: 1072:#ifdef HAVE_EVENTFD
@@ -1096,24 +1096,24 @@
         -: 1092: *
         -: 1093: * nthreads  Number of worker event handler threads to spawn
         -: 1094: */
-      118: 1095:void memcached_thread_init(int nthreads, void *arg) {
-      118: 1096:    int         i;
-      118: 1097:    int         power;
+      119: 1095:void memcached_thread_init(int nthreads, void *arg) {
+      119: 1096:    int         i;
+      119: 1097:    int         power;
         -: 1098:
-    30326: 1099:    for (i = 0; i < POWER_LARGEST; i++) {
-    30208: 1100:        pthread_mutex_init(&lru_locks[i], NULL);
+    30583: 1099:    for (i = 0; i < POWER_LARGEST; i++) {
+    30464: 1100:        pthread_mutex_init(&lru_locks[i], NULL);
         -: 1101:    }
-      118: 1102:    pthread_mutex_init(&worker_hang_lock, NULL);
+      119: 1102:    pthread_mutex_init(&worker_hang_lock, NULL);
         -: 1103:
-      118: 1104:    pthread_mutex_init(&init_lock, NULL);
-      118: 1105:    pthread_cond_init(&init_cond, NULL);
+      119: 1104:    pthread_mutex_init(&init_lock, NULL);
+      119: 1105:    pthread_cond_init(&init_cond, NULL);
         -: 1106:
         -: 1107:    /* Want a wide lock table, but don't waste memory */
-      118: 1108:    if (nthreads < 3) {
+      119: 1108:    if (nthreads < 3) {
         -: 1109:        power = 10;
-      118: 1110:    } else if (nthreads < 4) {
+      119: 1110:    } else if (nthreads < 4) {
         -: 1111:        power = 11;
-      118: 1112:    } else if (nthreads < 5) {
+      119: 1112:    } else if (nthreads < 5) {
         -: 1113:        power = 12;
         1: 1114:    } else if (nthreads <= 10) {
         -: 1115:        power = 13;
@@ -1124,51 +1124,51 @@
         1: 1120:        power = 15;
         -: 1121:    }
         -: 1122:
-      118: 1123:    if (power >= hashpower) {
+      119: 1123:    if (power >= hashpower) {
     #####: 1124:        fprintf(stderr, "Hash table power size (%d) cannot be equal to or less than item lock table (%d)\n", hashpower, power);
     #####: 1125:        fprintf(stderr, "Item lock table grows with `-t N` (worker threadcount)\n");
     #####: 1126:        fprintf(stderr, "Hash table grows with `-o hashpower=N` \n");
     #####: 1127:        exit(1);
         -: 1128:    }
         -: 1129:
-      118: 1130:    item_lock_count = hashsize(power);
-      118: 1131:    item_lock_hashpower = power;
+      119: 1130:    item_lock_count = hashsize(power);
+      119: 1131:    item_lock_hashpower = power;
         -: 1132:
-      118: 1133:    item_locks = calloc(item_lock_count, sizeof(pthread_mutex_t));
-      118: 1134:    if (! item_locks) {
+      119: 1133:    item_locks = calloc(item_lock_count, sizeof(pthread_mutex_t));
+      119: 1134:    if (! item_locks) {
     #####: 1135:        perror("Can't allocate item locks");
     #####: 1136:        exit(1);
         -: 1137:    }
-   512118: 1138:    for (i = 0; i < item_lock_count; i++) {
-   512000: 1139:        pthread_mutex_init(&item_locks[i], NULL);
+   516215: 1138:    for (i = 0; i < item_lock_count; i++) {
+   516096: 1139:        pthread_mutex_init(&item_locks[i], NULL);
         -: 1140:    }
         -: 1141:
-      118: 1142:    threads = calloc(nthreads, sizeof(LIBEVENT_THREAD));
-      118: 1143:    if (! threads) {
+      119: 1142:    threads = calloc(nthreads, sizeof(LIBEVENT_THREAD));
+      119: 1143:    if (! threads) {
     #####: 1144:        perror("Can't allocate thread descriptors");
     #####: 1145:        exit(1);
         -: 1146:    }
         -: 1147:
-      618: 1148:    for (i = 0; i < nthreads; i++) {
-      500: 1149:        memcached_thread_notify_init(&threads[i].n);
-      500: 1150:        memcached_thread_notify_init(&threads[i].ion);
+      623: 1148:    for (i = 0; i < nthreads; i++) {
+      504: 1149:        memcached_thread_notify_init(&threads[i].n);
+      504: 1150:        memcached_thread_notify_init(&threads[i].ion);
         -: 1151:#ifdef EXTSTORE
-      500: 1152:        threads[i].storage = arg;
+      504: 1152:        threads[i].storage = arg;
         -: 1153:#endif
-      500: 1154:        threads[i].thread_baseid = i;
-      500: 1155:        setup_thread(&threads[i]);
+      504: 1154:        threads[i].thread_baseid = i;
+      504: 1155:        setup_thread(&threads[i]);
         -: 1156:        /* Reserve three fds for the libevent base, and two for the pipe */
-      500: 1157:        stats_state.reserved_fds += 5;
+      504: 1157:        stats_state.reserved_fds += 5;
         -: 1158:    }
         -: 1159:
         -: 1160:    /* Create threads after we've done all the libevent setup. */
-      618: 1161:    for (i = 0; i < nthreads; i++) {
-      500: 1162:        create_worker(worker_libevent, &threads[i]);
+      623: 1161:    for (i = 0; i < nthreads; i++) {
+      504: 1162:        create_worker(worker_libevent, &threads[i]);
         -: 1163:    }
         -: 1164:
         -: 1165:    /* Wait for all the threads to set themselves up before returning. */
-      118: 1166:    pthread_mutex_lock(&init_lock);
-      118: 1167:    wait_for_thread_registration(nthreads);
-      118: 1168:    pthread_mutex_unlock(&init_lock);
-      118: 1169:}
+      119: 1166:    pthread_mutex_lock(&init_lock);
+      119: 1167:    wait_for_thread_registration(nthreads);
+      119: 1168:    pthread_mutex_unlock(&init_lock);
+      119: 1169:}
         -: 1170:

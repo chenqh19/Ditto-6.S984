@@ -1,7 +1,7 @@
         -:    0:Source:/usr/include/x86_64-linux-gnu/bits/stdio2.h
         -:    0:Graph:util.gcno
         -:    0:Data:util.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* Checking macros for stdio functions.
         -:    2:   Copyright (C) 2004-2020 Free Software Foundation, Inc.
         -:    3:   This file is part of the GNU C Library.
@@ -65,10 +65,10 @@
         -:   61:
         -:   62:# ifdef __va_arg_pack
         -:   63:__fortify_function int
-    22230:   64:__NTH (snprintf (char *__restrict __s, size_t __n,
+    22420:   64:__NTH (snprintf (char *__restrict __s, size_t __n,
         -:   65:		 const char *__restrict __fmt, ...))
         -:   66:{
-    22230:   67:  return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+    22420:   67:  return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
         -:   68:				   __bos (__s), __fmt, __va_arg_pack ());
         -:   69:}
         -:   70:# elif !defined __cplusplus
@@ -78,10 +78,10 @@
         -:   74:# endif
         -:   75:
         -:   76:__fortify_function int
-        2:   77:__NTH (vsnprintf (char *__restrict __s, size_t __n,
+        1:   77:__NTH (vsnprintf (char *__restrict __s, size_t __n,
         -:   78:		  const char *__restrict __fmt, __gnuc_va_list __ap))
         -:   79:{
-        2:   80:  return __builtin___vsnprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+        1:   80:  return __builtin___vsnprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
         -:   81:				    __bos (__s), __fmt, __ap);
         -:   82:}
         -:   83:

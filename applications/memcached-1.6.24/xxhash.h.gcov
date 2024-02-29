@@ -1,7 +1,7 @@
         -:    0:Source:xxhash.h
         -:    0:Graph:hash.gcno
         -:    0:Data:hash.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/*
         -:    2: * xxHash - Extremely Fast Hash algorithm
         -:    3: * Header File

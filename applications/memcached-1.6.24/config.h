@@ -73,6 +73,9 @@
 /* Define to 1 if you have the `memcntl' function. */
 /* #undef HAVE_MEMCNTL */
 
+/* Define to 1 if you have the <memory.h> header file. */
+#define HAVE_MEMORY_H 1
+
 /* Define to 1 if you have the `mlockall' function. */
 #define HAVE_MLOCKALL 1
 
@@ -108,9 +111,6 @@
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
-
-/* Define to 1 if you have the <stdio.h> header file. */
-#define HAVE_STDIO_H 1
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
@@ -175,9 +175,7 @@
 /* Set to nonzero if you want to compile a statically linked binary */
 /* #undef STATIC */
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
-   required in a freestanding environment). This macro is provided for
-   backward compatibility; new code need not use it. */
+/* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
 /* Set to nonzero if you want to enable TLS */

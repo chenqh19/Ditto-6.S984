@@ -1,7 +1,7 @@
         -:    0:Source:storage.c
         -:    0:Graph:storage.gcno
         -:    0:Data:storage.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
         -:    2:#include "memcached.h"
         -:    3:#ifdef EXTSTORE
@@ -56,13 +56,13 @@
         -:   52:    }
         -:   53:}
         -:   54:
-   204467:   55:void storage_delete(void *e, item *it) {
-   204467:   56:    if (it->it_flags & ITEM_HDR) {
-     9697:   57:        item_hdr *hdr = (item_hdr *)ITEM_data(it);
-     9697:   58:        extstore_delete(e, hdr->page_id, hdr->page_version,
-     9697:   59:                1, ITEM_ntotal(it));
+   204474:   55:void storage_delete(void *e, item *it) {
+   204474:   56:    if (it->it_flags & ITEM_HDR) {
+     9698:   57:        item_hdr *hdr = (item_hdr *)ITEM_data(it);
+     9698:   58:        extstore_delete(e, hdr->page_id, hdr->page_version,
+     9698:   59:                1, ITEM_ntotal(it));
         -:   60:    }
-   204467:   61:}
+   204474:   61:}
         -:   62:
         -:   63:// Function for the extra stats called from a protocol.
         -:   64:// NOTE: This either needs a name change or a wrapper, perhaps?
@@ -100,9 +100,9 @@
         -:   96:}
         -:   97:
         -:   98:// Additional storage stats for the main stats output.
-     3796:   99:void storage_stats(ADD_STAT add_stats, conn *c) {
-     3796:  100:    struct extstore_stats st;
-     3796:  101:    if (c->thread->storage) {
+     3797:   99:void storage_stats(ADD_STAT add_stats, conn *c) {
+     3797:  100:    struct extstore_stats st;
+     3797:  101:    if (c->thread->storage) {
      1049:  102:        STATS_LOCK();
      1049:  103:        APPEND_STAT("extstore_compact_lost", "%llu", (unsigned long long)stats.extstore_compact_lost);
      1049:  104:        APPEND_STAT("extstore_compact_rescues", "%llu", (unsigned long long)stats.extstore_compact_rescues);
@@ -127,7 +127,7 @@
      1049:  123:        APPEND_STAT("extstore_io_queue", "%llu", (unsigned long long)(st.io_queue));
         -:  124:    }
         -:  125:
-     3796:  126:}
+     3797:  126:}
         -:  127:
         -:  128:// This callback runs in the IO thread.
         -:  129:// TODO: Some or all of this should move to the
@@ -426,27 +426,27 @@
        84:  422:            uint8_t flags = ITEM_LINKED|ITEM_FETCHED|ITEM_ACTIVE;
         -:  423:            // Item must be recently hit at least twice to recache.
        84:  424:            if (((h_it->it_flags & flags) == flags) &&
-       52:  425:                    h_it->time > current_time - ITEM_UPDATE_INTERVAL &&
-       52:  426:                    c->recache_counter++ % settings.ext_recache_rate == 0) {
-       52:  427:                do_free = false;
+       53:  425:                    h_it->time > current_time - ITEM_UPDATE_INTERVAL &&
+       53:  426:                    c->recache_counter++ % settings.ext_recache_rate == 0) {
+       53:  427:                do_free = false;
         -:  428:                // In case it's been updated.
-       52:  429:                it->exptime = h_it->exptime;
-       52:  430:                it->it_flags &= ~ITEM_LINKED;
-       52:  431:                it->refcount = 0;
-       52:  432:                it->h_next = NULL; // might not be necessary.
-       52:  433:                STORAGE_delete(c->thread->storage, h_it);
-       52:  434:                item_replace(h_it, it, hv);
-       52:  435:                ITEM_set_cas(it, ITEM_get_cas(h_it));
-       52:  436:                pthread_mutex_lock(&c->thread->stats.mutex);
-       52:  437:                c->thread->stats.recache_from_extstore++;
-       52:  438:                pthread_mutex_unlock(&c->thread->stats.mutex);
+       53:  429:                it->exptime = h_it->exptime;
+       53:  430:                it->it_flags &= ~ITEM_LINKED;
+       53:  431:                it->refcount = 0;
+       53:  432:                it->h_next = NULL; // might not be necessary.
+       53:  433:                STORAGE_delete(c->thread->storage, h_it);
+       53:  434:                item_replace(h_it, it, hv);
+       53:  435:                ITEM_set_cas(it, ITEM_get_cas(h_it));
+       53:  436:                pthread_mutex_lock(&c->thread->stats.mutex);
+       53:  437:                c->thread->stats.recache_from_extstore++;
+       53:  438:                pthread_mutex_unlock(&c->thread->stats.mutex);
         -:  439:            }
         -:  440:        }
        84:  441:        if (hold_lock)
        84:  442:            item_trylock_unlock(hold_lock);
         -:  443:    }
        99:  444:    if (do_free)
-      324:  445:        slabs_free(it, ITEM_ntotal(it), ITEM_clsid(it));
+      323:  445:        slabs_free(it, ITEM_ntotal(it), ITEM_clsid(it));
         -:  446:
       391:  447:    p->io_ctx.buf = NULL;
       391:  448:    p->io_ctx.next = NULL;
@@ -482,100 +482,100 @@
         -:  478: * WRITE FLUSH THREAD
         -:  479: */
         -:  480:
-  5403631:  481:static int storage_write(void *storage, const int clsid, const int item_age) {
-  5403631:  482:    int did_moves = 0;
-  5403631:  483:    struct lru_pull_tail_return it_info;
+  5405690:  481:static int storage_write(void *storage, const int clsid, const int item_age) {
+  5405690:  482:    int did_moves = 0;
+  5405690:  483:    struct lru_pull_tail_return it_info;
         -:  484:
-  5403631:  485:    it_info.it = NULL;
-  5403631:  486:    lru_pull_tail(clsid, COLD_LRU, 0, LRU_PULL_RETURN_ITEM, 0, &it_info);
+  5405690:  485:    it_info.it = NULL;
+  5405690:  486:    lru_pull_tail(clsid, COLD_LRU, 0, LRU_PULL_RETURN_ITEM, 0, &it_info);
         -:  487:    /* Item is locked, and we have a reference to it. */
-  5403631:  488:    if (it_info.it == NULL) {
+  5405690:  488:    if (it_info.it == NULL) {
         -:  489:        return did_moves;
         -:  490:    }
         -:  491:
-    61809:  492:    obj_io io;
-    61809:  493:    item *it = it_info.it;
+    62999:  492:    obj_io io;
+    62999:  493:    item *it = it_info.it;
         -:  494:    /* First, storage for the header object */
-    61809:  495:    size_t orig_ntotal = ITEM_ntotal(it);
-    61809:  496:    client_flags_t flags;
-    61809:  497:    if ((it->it_flags & ITEM_HDR) == 0 &&
-    60306:  498:            (item_age == 0 || current_time - it->time > item_age)) {
-    25046:  499:        FLAGS_CONV(it, flags);
-    25046:  500:        item *hdr_it = do_item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, sizeof(item_hdr));
+    62999:  495:    size_t orig_ntotal = ITEM_ntotal(it);
+    62999:  496:    client_flags_t flags;
+    62999:  497:    if ((it->it_flags & ITEM_HDR) == 0 &&
+    61496:  498:            (item_age == 0 || current_time - it->time > item_age)) {
+    25019:  499:        FLAGS_CONV(it, flags);
+    25019:  500:        item *hdr_it = do_item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, sizeof(item_hdr));
         -:  501:        /* Run the storage write understanding the start of the item is dirty.
         -:  502:         * We will fill it (time/exptime/etc) from the header item on read.
         -:  503:         */
-    25046:  504:        if (hdr_it != NULL) {
-    25046:  505:            int bucket = (it->it_flags & ITEM_CHUNKED) ?
-    25046:  506:                PAGE_BUCKET_CHUNKED : PAGE_BUCKET_DEFAULT;
+    25019:  504:        if (hdr_it != NULL) {
+    25019:  505:            int bucket = (it->it_flags & ITEM_CHUNKED) ?
+    25019:  506:                PAGE_BUCKET_CHUNKED : PAGE_BUCKET_DEFAULT;
         -:  507:            // Compress soon to expire items into similar pages.
-    25046:  508:            if (it->exptime - current_time < settings.ext_low_ttl) {
-     1304:  509:                bucket = PAGE_BUCKET_LOWTTL;
+    25019:  508:            if (it->exptime - current_time < settings.ext_low_ttl) {
+     1298:  509:                bucket = PAGE_BUCKET_LOWTTL;
         -:  510:            }
-    25046:  511:            hdr_it->it_flags |= ITEM_HDR;
-    25046:  512:            io.len = orig_ntotal;
-    25046:  513:            io.mode = OBJ_IO_WRITE;
+    25019:  511:            hdr_it->it_flags |= ITEM_HDR;
+    25019:  512:            io.len = orig_ntotal;
+    25019:  513:            io.mode = OBJ_IO_WRITE;
         -:  514:            // NOTE: when the item is read back in, the slab mover
         -:  515:            // may see it. Important to have refcount>=2 or ~ITEM_LINKED
-   25046*:  516:            assert(it->refcount >= 2);
+   25019*:  516:            assert(it->refcount >= 2);
         -:  517:            // NOTE: write bucket vs free page bucket will disambiguate once
         -:  518:            // lowttl feature is better understood.
-    25046:  519:            if (extstore_write_request(storage, bucket, bucket, &io) == 0) {
+    25019:  519:            if (extstore_write_request(storage, bucket, bucket, &io) == 0) {
         -:  520:                // cuddle the hash value into the time field so we don't have
         -:  521:                // to recalculate it.
-    22567:  522:                item *buf_it = (item *) io.buf;
-    22567:  523:                buf_it->time = it_info.hv;
+    22568:  522:                item *buf_it = (item *) io.buf;
+    22568:  523:                buf_it->time = it_info.hv;
         -:  524:                // copy from past the headers + time headers.
         -:  525:                // TODO: should be in items.c
-    22567:  526:                if (it->it_flags & ITEM_CHUNKED) {
+    22568:  526:                if (it->it_flags & ITEM_CHUNKED) {
         -:  527:                    // Need to loop through the item and copy
-     1304:  528:                    item_chunk *sch = (item_chunk *) ITEM_schunk(it);
-     1304:  529:                    int remain = orig_ntotal;
-     1304:  530:                    int copied = 0;
+     1305:  528:                    item_chunk *sch = (item_chunk *) ITEM_schunk(it);
+     1305:  529:                    int remain = orig_ntotal;
+     1305:  530:                    int copied = 0;
         -:  531:                    // copy original header
-     1304:  532:                    int hdrtotal = ITEM_ntotal(it) - it->nbytes;
-     1304:  533:                    memcpy((char *)io.buf+STORE_OFFSET, (char *)it+STORE_OFFSET, hdrtotal - STORE_OFFSET);
-     1304:  534:                    copied = hdrtotal;
+     1305:  532:                    int hdrtotal = ITEM_ntotal(it) - it->nbytes;
+     1305:  533:                    memcpy((char *)io.buf+STORE_OFFSET, (char *)it+STORE_OFFSET, hdrtotal - STORE_OFFSET);
+     1305:  534:                    copied = hdrtotal;
         -:  535:                    // copy data in like it were one large object.
-     7969:  536:                    while (sch && remain) {
-    6665*:  537:                        assert(remain >= sch->used);
-     6665:  538:                        memcpy((char *)io.buf+copied, sch->data, sch->used);
+     7977:  536:                    while (sch && remain) {
+    6672*:  537:                        assert(remain >= sch->used);
+     6672:  538:                        memcpy((char *)io.buf+copied, sch->data, sch->used);
         -:  539:                        // FIXME: use one variable?
-     6665:  540:                        remain -= sch->used;
-     6665:  541:                        copied += sch->used;
-     6665:  542:                        sch = sch->next;
+     6672:  540:                        remain -= sch->used;
+     6672:  541:                        copied += sch->used;
+     6672:  542:                        sch = sch->next;
         -:  543:                    }
         -:  544:                } else {
     21263:  545:                    memcpy((char *)io.buf+STORE_OFFSET, (char *)it+STORE_OFFSET, io.len-STORE_OFFSET);
         -:  546:                }
         -:  547:                // crc what we copied so we can do it sequentially.
-    22567:  548:                buf_it->it_flags &= ~ITEM_LINKED;
-    22567:  549:                buf_it->exptime = crc32c(0, (char*)io.buf+STORE_OFFSET, orig_ntotal-STORE_OFFSET);
-    22567:  550:                extstore_write(storage, &io);
-    22567:  551:                item_hdr *hdr = (item_hdr *) ITEM_data(hdr_it);
-    22567:  552:                hdr->page_version = io.page_version;
-    22567:  553:                hdr->page_id = io.page_id;
-    22567:  554:                hdr->offset  = io.offset;
+    22568:  548:                buf_it->it_flags &= ~ITEM_LINKED;
+    22568:  549:                buf_it->exptime = crc32c(0, (char*)io.buf+STORE_OFFSET, orig_ntotal-STORE_OFFSET);
+    22568:  550:                extstore_write(storage, &io);
+    22568:  551:                item_hdr *hdr = (item_hdr *) ITEM_data(hdr_it);
+    22568:  552:                hdr->page_version = io.page_version;
+    22568:  553:                hdr->page_id = io.page_id;
+    22568:  554:                hdr->offset  = io.offset;
         -:  555:                // overload nbytes for the header it
-    22567:  556:                hdr_it->nbytes = it->nbytes;
+    22568:  556:                hdr_it->nbytes = it->nbytes;
         -:  557:                /* success! Now we need to fill relevant data into the new
         -:  558:                 * header and replace. Most of this requires the item lock
         -:  559:                 */
         -:  560:                /* CAS gets set while linking. Copy post-replace */
-    22567:  561:                item_replace(it, hdr_it, it_info.hv);
-    22567:  562:                ITEM_set_cas(hdr_it, ITEM_get_cas(it));
-    22567:  563:                do_item_remove(hdr_it);
-    22567:  564:                did_moves = 1;
-   22567*:  565:                LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EXTSTORE_WRITE, it, bucket);
+    22568:  561:                item_replace(it, hdr_it, it_info.hv);
+    22568:  562:                ITEM_set_cas(hdr_it, ITEM_get_cas(it));
+    22568:  563:                do_item_remove(hdr_it);
+    22568:  564:                did_moves = 1;
+   22568*:  565:                LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EXTSTORE_WRITE, it, bucket);
         -:  566:            } else {
         -:  567:                /* Failed to write for some reason, can't continue. */
-     2479:  568:                slabs_free(hdr_it, ITEM_ntotal(hdr_it), ITEM_clsid(hdr_it));
+     2451:  568:                slabs_free(hdr_it, ITEM_ntotal(hdr_it), ITEM_clsid(hdr_it));
         -:  569:            }
         -:  570:        }
         -:  571:    }
-    61809:  572:    do_item_remove(it);
-    61809:  573:    item_unlock(it_info.hv);
-    61809:  574:    return did_moves;
+    62999:  572:    do_item_remove(it);
+    62999:  573:    item_unlock(it_info.hv);
+    62999:  574:    return did_moves;
         -:  575:}
         -:  576:
         -:  577:static pthread_t storage_write_tid;
@@ -597,73 +597,73 @@
         -:  593:
        10:  594:    pthread_mutex_lock(&storage_write_plock);
         -:  595:
-   294388:  596:    while (1) {
+   294568:  596:    while (1) {
         -:  597:        // cache per-loop to avoid calls to the slabs_clsid() search loop
-    98136:  598:        int min_class = slabs_clsid(settings.ext_item_size);
-    98136:  599:        unsigned int global_pages = global_page_pool_size(NULL);
-    98136:  600:        bool do_sleep = true;
-    98136:  601:        int target_pages = 0;
-    98136:  602:        if (global_pages < settings.ext_global_pool_min) {
+    98196:  598:        int min_class = slabs_clsid(settings.ext_item_size);
+    98196:  599:        unsigned int global_pages = global_page_pool_size(NULL);
+    98196:  600:        bool do_sleep = true;
+    98196:  601:        int target_pages = 0;
+    98196:  602:        if (global_pages < settings.ext_global_pool_min) {
     #####:  603:            target_pages = settings.ext_global_pool_min - global_pages;
         -:  604:        }
-    98136:  605:        counter++;
-    98136:  606:        if (to_sleep > settings.ext_max_sleep)
+    98196:  605:        counter++;
+    98196:  606:        if (to_sleep > settings.ext_max_sleep)
         -:  607:            to_sleep = settings.ext_max_sleep;
         -:  608:
-  6378840:  609:        for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
-  6280704:  610:            bool did_move = false;
-  6280704:  611:            bool mem_limit_reached = false;
-  6280704:  612:            unsigned int chunks_free;
-  6280704:  613:            int item_age;
+  6382740:  609:        for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6284544:  610:            bool did_move = false;
+  6284544:  611:            bool mem_limit_reached = false;
+  6284544:  612:            unsigned int chunks_free;
+  6284544:  613:            int item_age;
         -:  614:
-  6280704:  615:            if (min_class > x || (backoff[x] && (counter % backoff[x] != 0))) {
-   899640:  616:                continue;
+  6284544:  615:            if (min_class > x || (backoff[x] && (counter % backoff[x] != 0))) {
+   901422:  616:                continue;
         -:  617:            }
         -:  618:
         -:  619:            // Avoid extra slab lock calls during heavy writing.
-  5381064:  620:            unsigned int chunks_perpage = 0;
-  5381064:  621:            chunks_free = slabs_available_chunks(x, &mem_limit_reached,
+  5383122:  620:            unsigned int chunks_perpage = 0;
+  5383122:  621:            chunks_free = slabs_available_chunks(x, &mem_limit_reached,
         -:  622:                    &chunks_perpage);
-  5381064:  623:            unsigned int target = chunks_perpage * target_pages;
+  5383122:  623:            unsigned int target = chunks_perpage * target_pages;
         -:  624:
         -:  625:            // storage_write() will fail and cut loop after filling write buffer.
-  5403631:  626:            while (1) {
+  5405690:  626:            while (1) {
         -:  627:                // if we are low on chunks and no spare, push out early.
-  5403631:  628:                if (chunks_free < target) {
+  5405690:  628:                if (chunks_free < target) {
         -:  629:                    item_age = 0;
         -:  630:                } else {
-  5403631:  631:                    item_age = settings.ext_item_age;
+  5405690:  631:                    item_age = settings.ext_item_age;
         -:  632:                }
-  5403631:  633:                if (storage_write(storage, x, item_age)) {
-    22567:  634:                    chunks_free++; // Allow stopping if we've done enough this loop
-    22567:  635:                    did_move = true;
-    22567:  636:                    do_sleep = false;
-    22567:  637:                    if (to_sleep > WRITE_SLEEP_MIN)
-      229:  638:                        to_sleep /= 2;
+  5405690:  633:                if (storage_write(storage, x, item_age)) {
+    22568:  634:                    chunks_free++; // Allow stopping if we've done enough this loop
+    22568:  635:                    did_move = true;
+    22568:  636:                    do_sleep = false;
+    22568:  637:                    if (to_sleep > WRITE_SLEEP_MIN)
+      230:  638:                        to_sleep /= 2;
         -:  639:                } else {
         -:  640:                    break;
         -:  641:                }
         -:  642:            }
         -:  643:
-  5381064:  644:            if (!did_move) {
-  5380440:  645:                backoff[x]++;
+  5383122:  644:            if (!did_move) {
+  5382502:  645:                backoff[x]++;
         -:  646:            } else {
-      624:  647:                backoff[x] = 1;
+      620:  647:                backoff[x] = 1;
         -:  648:            }
         -:  649:        }
         -:  650:
         -:  651:        // flip lock so we can be paused or stopped
-    98136:  652:        pthread_mutex_unlock(&storage_write_plock);
-    98136:  653:        if (do_sleep) {
+    98196:  652:        pthread_mutex_unlock(&storage_write_plock);
+    98196:  653:        if (do_sleep) {
         -:  654:            // Only do backoffs on other slab classes if we're actively
         -:  655:            // flushing at least one class.
-  6338280:  656:            for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
-  6240768:  657:                backoff[x] = 1;
+  6342440:  656:            for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6244864:  657:                backoff[x] = 1;
         -:  658:            }
-    97512:  659:            usleep(to_sleep);
-    97502:  660:            to_sleep++;
+    97576:  659:            usleep(to_sleep);
+    97566:  660:            to_sleep++;
         -:  661:        }
-    98126:  662:        pthread_mutex_lock(&storage_write_plock);
+    98186:  662:        pthread_mutex_lock(&storage_write_plock);
         -:  663:    }
         -:  664:    return NULL;
         -:  665:}
@@ -713,23 +713,23 @@
         -:  709: * If we're more than half full, start skewing how aggressively to run
         -:  710: * compaction, up to a desired target when all pages are full.
         -:  711: */
-     1896:  712:static int storage_compact_check(void *storage, logger *l,
+     1886:  712:static int storage_compact_check(void *storage, logger *l,
         -:  713:        uint32_t *page_id, uint64_t *page_version,
         -:  714:        uint64_t *page_size, bool *drop_unread) {
-     1896:  715:    struct extstore_stats st;
-     1896:  716:    int x;
-     1896:  717:    double rate;
-     1896:  718:    uint64_t frag_limit;
-     1896:  719:    uint64_t low_version = ULLONG_MAX;
-     1896:  720:    uint64_t lowest_version = ULLONG_MAX;
-     1896:  721:    unsigned int low_page = 0;
-     1896:  722:    unsigned int lowest_page = 0;
-     1896:  723:    extstore_get_stats(storage, &st);
-     1896:  724:    if (st.pages_used == 0)
+     1886:  715:    struct extstore_stats st;
+     1886:  716:    int x;
+     1886:  717:    double rate;
+     1886:  718:    uint64_t frag_limit;
+     1886:  719:    uint64_t low_version = ULLONG_MAX;
+     1886:  720:    uint64_t lowest_version = ULLONG_MAX;
+     1886:  721:    unsigned int low_page = 0;
+     1886:  722:    unsigned int lowest_page = 0;
+     1886:  723:    extstore_get_stats(storage, &st);
+     1886:  724:    if (st.pages_used == 0)
         -:  725:        return 0;
         -:  726:
         -:  727:    // lets pick a target "wasted" value and slew.
-     1896:  728:    if (st.pages_free > settings.ext_compact_under)
+     1886:  728:    if (st.pages_free > settings.ext_compact_under)
         -:  729:        return 0;
       638:  730:    *drop_unread = false;
         -:  731:
@@ -746,16 +746,16 @@
         -:  742:    // find oldest page by version that violates the constraint
      6481:  743:    for (x = 0; x < st.page_count; x++) {
      5205:  744:        if (st.page_data[x].version == 0 ||
-     1103:  745:            st.page_data[x].bucket == PAGE_BUCKET_LOWTTL)
-     4114:  746:            continue;
-     1091:  747:        if (st.page_data[x].version < lowest_version) {
-      702:  748:            lowest_page = x;
-      702:  749:            lowest_version = st.page_data[x].version;
+     1097:  745:            st.page_data[x].bucket == PAGE_BUCKET_LOWTTL)
+     4120:  746:            continue;
+     1085:  747:        if (st.page_data[x].version < lowest_version) {
+      700:  748:            lowest_page = x;
+      700:  749:            lowest_version = st.page_data[x].version;
         -:  750:        }
-     1091:  751:        if (st.page_data[x].bytes_used < frag_limit) {
-      105:  752:            if (st.page_data[x].version < low_version) {
-       17:  753:                low_page = x;
-       17:  754:                low_version = st.page_data[x].version;
+     1085:  751:        if (st.page_data[x].bytes_used < frag_limit) {
+      104:  752:            if (st.page_data[x].version < low_version) {
+       16:  753:                low_page = x;
+       16:  754:                low_version = st.page_data[x].version;
         -:  755:            }
         -:  756:        }
         -:  757:    }
@@ -764,10 +764,10 @@
         -:  760:
         -:  761:    // we have a page + version to attempt to reclaim.
       638:  762:    if (low_version != ULLONG_MAX) {
-       14:  763:        *page_id = low_page;
-       14:  764:        *page_version = low_version;
-       14:  765:        return 1;
-      624:  766:    } else if (lowest_version != ULLONG_MAX && settings.ext_drop_unread
+       13:  763:        *page_id = low_page;
+       13:  764:        *page_version = low_version;
+       13:  765:        return 1;
+      625:  766:    } else if (lowest_version != ULLONG_MAX && settings.ext_drop_unread
       417:  767:            && st.pages_free <= settings.ext_drop_under) {
         -:  768:        // nothing matched the frag rate barrier, so pick the absolute oldest
         -:  769:        // version if we're configured to drop items.
@@ -792,74 +792,74 @@
         -:  788:    bool miss; // version flipped out from under us
         -:  789:};
         -:  790:
-       64:  791:static void storage_compact_readback(void *storage, logger *l,
+       63:  791:static void storage_compact_readback(void *storage, logger *l,
         -:  792:        bool drop_unread, char *readback_buf,
         -:  793:        uint32_t page_id, uint64_t page_version, uint32_t page_offset, uint64_t read_size) {
-       64:  794:    uint64_t offset = 0;
-       64:  795:    unsigned int rescues = 0;
-       64:  796:    unsigned int lost = 0;
-       64:  797:    unsigned int skipped = 0;
+       63:  794:    uint64_t offset = 0;
+       63:  795:    unsigned int rescues = 0;
+       63:  796:    unsigned int lost = 0;
+       63:  797:    unsigned int skipped = 0;
         -:  798:
-     5853:  799:    while (offset < read_size) {
-     5853:  800:        item *hdr_it = NULL;
-     5853:  801:        item_hdr *hdr = NULL;
-     5853:  802:        item *it = (item *)(readback_buf+offset);
-     5853:  803:        unsigned int ntotal;
+     5748:  799:    while (offset < read_size) {
+     5748:  800:        item *hdr_it = NULL;
+     5748:  801:        item_hdr *hdr = NULL;
+     5748:  802:        item *it = (item *)(readback_buf+offset);
+     5748:  803:        unsigned int ntotal;
         -:  804:        // probably zeroed out junk at the end of the wbuf
-     5853:  805:        if (it->nkey == 0) {
+     5748:  805:        if (it->nkey == 0) {
         -:  806:            break;
         -:  807:        }
         -:  808:
-     5789:  809:        ntotal = ITEM_ntotal(it);
-     5789:  810:        uint32_t hv = (uint32_t)it->time;
-     5789:  811:        item_lock(hv);
+     5685:  809:        ntotal = ITEM_ntotal(it);
+     5685:  810:        uint32_t hv = (uint32_t)it->time;
+     5685:  811:        item_lock(hv);
         -:  812:        // We don't have a conn and don't need to do most of do_item_get
-     5789:  813:        hdr_it = assoc_find(ITEM_key(it), it->nkey, hv);
-     5789:  814:        if (hdr_it != NULL) {
-     3285:  815:            bool do_write = false;
-     3285:  816:            refcount_incr(hdr_it);
+     5685:  813:        hdr_it = assoc_find(ITEM_key(it), it->nkey, hv);
+     5685:  814:        if (hdr_it != NULL) {
+     3247:  815:            bool do_write = false;
+     3247:  816:            refcount_incr(hdr_it);
         -:  817:
         -:  818:            // Check validity but don't bother removing it.
-     3285:  819:            if ((hdr_it->it_flags & ITEM_HDR) && !item_is_flushed(hdr_it) &&
-    3285*:  820:                   (hdr_it->exptime == 0 || hdr_it->exptime > current_time)) {
-     3285:  821:                hdr = (item_hdr *)ITEM_data(hdr_it);
-     3285:  822:                if (hdr->page_id == page_id && hdr->page_version == page_version
-     3285:  823:                        && hdr->offset == (int)offset + page_offset) {
+     3247:  819:            if ((hdr_it->it_flags & ITEM_HDR) && !item_is_flushed(hdr_it) &&
+    3247*:  820:                   (hdr_it->exptime == 0 || hdr_it->exptime > current_time)) {
+     3247:  821:                hdr = (item_hdr *)ITEM_data(hdr_it);
+     3247:  822:                if (hdr->page_id == page_id && hdr->page_version == page_version
+     3247:  823:                        && hdr->offset == (int)offset + page_offset) {
         -:  824:                    // Item header is still completely valid.
-     3186:  825:                    extstore_delete(storage, page_id, page_version, 1, ntotal);
+     3148:  825:                    extstore_delete(storage, page_id, page_version, 1, ntotal);
         -:  826:                    // drop inactive items.
-     3186:  827:                    if (drop_unread && GET_LRU(hdr_it->slabs_clsid) == COLD_LRU) {
-     1271:  828:                        do_write = false;
-     1271:  829:                        skipped++;
+     3148:  827:                    if (drop_unread && GET_LRU(hdr_it->slabs_clsid) == COLD_LRU) {
+     1170:  828:                        do_write = false;
+     1170:  829:                        skipped++;
         -:  830:                    } else {
         -:  831:                        do_write = true;
         -:  832:                    }
         -:  833:                }
         -:  834:            }
         -:  835:
-     3285:  836:            if (do_write) {
-     1915:  837:                bool do_update = false;
-     1915:  838:                int tries;
-     1915:  839:                obj_io io;
-     1915:  840:                io.len = ntotal;
-     1915:  841:                io.mode = OBJ_IO_WRITE;
-     1967:  842:                for (tries = 10; tries > 0; tries--) {
-     1967:  843:                    if (extstore_write_request(storage, PAGE_BUCKET_COMPACT, PAGE_BUCKET_COMPACT, &io) == 0) {
-     1915:  844:                        memcpy(io.buf, it, io.len);
-     1915:  845:                        extstore_write(storage, &io);
-     1915:  846:                        do_update = true;
-     1915:  847:                        break;
+     3247:  836:            if (do_write) {
+     1978:  837:                bool do_update = false;
+     1978:  838:                int tries;
+     1978:  839:                obj_io io;
+     1978:  840:                io.len = ntotal;
+     1978:  841:                io.mode = OBJ_IO_WRITE;
+     2031:  842:                for (tries = 10; tries > 0; tries--) {
+     2031:  843:                    if (extstore_write_request(storage, PAGE_BUCKET_COMPACT, PAGE_BUCKET_COMPACT, &io) == 0) {
+     1978:  844:                        memcpy(io.buf, it, io.len);
+     1978:  845:                        extstore_write(storage, &io);
+     1978:  846:                        do_update = true;
+     1978:  847:                        break;
         -:  848:                    } else {
-       52:  849:                        usleep(1000);
+       53:  849:                        usleep(1000);
         -:  850:                    }
         -:  851:                }
         -:  852:
-    1915*:  853:                if (do_update) {
-     1915:  854:                    if (it->refcount == 2) {
-     1915:  855:                        hdr->page_version = io.page_version;
-     1915:  856:                        hdr->page_id = io.page_id;
-     1915:  857:                        hdr->offset = io.offset;
-     1915:  858:                        rescues++;
+    1978*:  853:                if (do_update) {
+     1978:  854:                    if (it->refcount == 2) {
+     1978:  855:                        hdr->page_version = io.page_version;
+     1978:  856:                        hdr->page_id = io.page_id;
+     1978:  857:                        hdr->offset = io.offset;
+     1978:  858:                        rescues++;
         -:  859:                    } else {
         -:  860:                        // re-alloc and replace header.
     #####:  861:                        client_flags_t flags;
@@ -893,37 +893,37 @@
         -:  889:                }
         -:  890:            }
         -:  891:
-     3285:  892:            do_item_remove(hdr_it);
+     3247:  892:            do_item_remove(hdr_it);
         -:  893:        }
         -:  894:
-     5789:  895:        item_unlock(hv);
-     5789:  896:        offset += ntotal;
-     5789:  897:        if (read_size - offset < sizeof(struct _stritem))
+     5685:  895:        item_unlock(hv);
+     5685:  896:        offset += ntotal;
+     5685:  897:        if (read_size - offset < sizeof(struct _stritem))
         -:  898:            break;
         -:  899:    }
         -:  900:
-       64:  901:    STATS_LOCK();
-       64:  902:    stats.extstore_compact_lost += lost;
-       64:  903:    stats.extstore_compact_rescues += rescues;
-       64:  904:    stats.extstore_compact_skipped += skipped;
-       64:  905:    STATS_UNLOCK();
-      64*:  906:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_END,
+       63:  901:    STATS_LOCK();
+       63:  902:    stats.extstore_compact_lost += lost;
+       63:  903:    stats.extstore_compact_rescues += rescues;
+       63:  904:    stats.extstore_compact_skipped += skipped;
+       63:  905:    STATS_UNLOCK();
+      63*:  906:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_END,
         -:  907:            NULL, page_id, offset, rescues, lost, skipped);
-       64:  908:}
+       63:  908:}
         -:  909:
-       68:  910:static void _storage_compact_cb(void *e, obj_io *io, int ret) {
-       68:  911:    struct storage_compact_wrap *wrap = (struct storage_compact_wrap *)io->data;
-      68*:  912:    assert(wrap->submitted == true);
+       66:  910:static void _storage_compact_cb(void *e, obj_io *io, int ret) {
+       66:  911:    struct storage_compact_wrap *wrap = (struct storage_compact_wrap *)io->data;
+      66*:  912:    assert(wrap->submitted == true);
         -:  913:
-       68:  914:    pthread_mutex_lock(&wrap->lock);
+       66:  914:    pthread_mutex_lock(&wrap->lock);
         -:  915:
-       68:  916:    if (ret < 1) {
-        4:  917:        wrap->miss = true;
+       66:  916:    if (ret < 1) {
+        3:  917:        wrap->miss = true;
         -:  918:    }
-       68:  919:    wrap->done = true;
+       66:  919:    wrap->done = true;
         -:  920:
-       68:  921:    pthread_mutex_unlock(&wrap->lock);
-       68:  922:}
+       66:  921:    pthread_mutex_unlock(&wrap->lock);
+       66:  922:}
         -:  923:
         -:  924:// TODO: hoist the storage bits from lru_maintainer_thread in here.
         -:  925:// would be nice if they could avoid hammering the same locks though?
@@ -964,49 +964,49 @@
        10:  960:    wrap.io.cb = _storage_compact_cb;
        10:  961:    pthread_mutex_lock(&storage_compact_plock);
         -:  962:
-     2038:  963:    while (1) {
-     2038:  964:        pthread_mutex_unlock(&storage_compact_plock);
-     2038:  965:        if (to_sleep) {
-     2038:  966:            extstore_run_maint(storage);
-     2038:  967:            usleep(to_sleep);
+     2025:  963:    while (1) {
+     2025:  964:        pthread_mutex_unlock(&storage_compact_plock);
+     2025:  965:        if (to_sleep) {
+     2025:  966:            extstore_run_maint(storage);
+     2025:  967:            usleep(to_sleep);
         -:  968:        }
-     2028:  969:        pthread_mutex_lock(&storage_compact_plock);
+     2015:  969:        pthread_mutex_lock(&storage_compact_plock);
         -:  970:
-     2028:  971:        if (!compacting && storage_compact_check(storage, l,
+     2015:  971:        if (!compacting && storage_compact_check(storage, l,
         -:  972:                    &page_id, &page_version, &page_size, &drop_unread)) {
-       19:  973:            page_offset = 0;
-       19:  974:            compacting = true;
-      19*:  975:            LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_START,
+       18:  973:            page_offset = 0;
+       18:  974:            compacting = true;
+      18*:  975:            LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_START,
         -:  976:                    NULL, page_id, page_version);
         -:  977:        }
         -:  978:
-    2009*:  979:        if (compacting) {
-      151:  980:            pthread_mutex_lock(&wrap.lock);
-      151:  981:            if (page_offset < page_size && !wrap.done && !wrap.submitted) {
-       68:  982:                wrap.io.page_version = page_version;
-       68:  983:                wrap.io.page_id = page_id;
-       68:  984:                wrap.io.offset = page_offset;
+    1997*:  979:        if (compacting) {
+      147:  980:            pthread_mutex_lock(&wrap.lock);
+      147:  981:            if (page_offset < page_size && !wrap.done && !wrap.submitted) {
+       66:  982:                wrap.io.page_version = page_version;
+       66:  983:                wrap.io.page_id = page_id;
+       66:  984:                wrap.io.offset = page_offset;
         -:  985:                // FIXME: should be smarter about io->next (unlink at use?)
-       68:  986:                wrap.io.next = NULL;
-       68:  987:                wrap.submitted = true;
-       68:  988:                wrap.miss = false;
+       66:  986:                wrap.io.next = NULL;
+       66:  987:                wrap.submitted = true;
+       66:  988:                wrap.miss = false;
         -:  989:
-       68:  990:                extstore_submit(storage, &wrap.io);
-       83:  991:            } else if (wrap.miss) {
-       4*:  992:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_ABORT,
+       66:  990:                extstore_submit(storage, &wrap.io);
+       81:  991:            } else if (wrap.miss) {
+       3*:  992:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_ABORT,
         -:  993:                        NULL, page_id);
-        4:  994:                wrap.done = false;
-        4:  995:                wrap.submitted = false;
-        4:  996:                compacting = false;
-       79:  997:            } else if (wrap.submitted && wrap.done) {
-      64*:  998:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_START,
+        3:  994:                wrap.done = false;
+        3:  995:                wrap.submitted = false;
+        3:  996:                compacting = false;
+       78:  997:            } else if (wrap.submitted && wrap.done) {
+      63*:  998:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_START,
         -:  999:                        NULL, page_id, page_offset);
-       64: 1000:                storage_compact_readback(storage, l, drop_unread,
+       63: 1000:                storage_compact_readback(storage, l, drop_unread,
         -: 1001:                        readback_buf, page_id, page_version, page_offset,
-       64: 1002:                        settings.ext_wbuf_size);
-       64: 1003:                page_offset += settings.ext_wbuf_size;
-       64: 1004:                wrap.done = false;
-       64: 1005:                wrap.submitted = false;
+       63: 1002:                        settings.ext_wbuf_size);
+       63: 1003:                page_offset += settings.ext_wbuf_size;
+       63: 1004:                wrap.done = false;
+       63: 1005:                wrap.submitted = false;
        15: 1006:            } else if (page_offset >= page_size) {
        15: 1007:                compacting = false;
        15: 1008:                wrap.done = false;
@@ -1015,12 +1015,12 @@
       15*: 1011:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_END,
         -: 1012:                        NULL, page_id);
         -: 1013:            }
-      151: 1014:            pthread_mutex_unlock(&wrap.lock);
+      147: 1014:            pthread_mutex_unlock(&wrap.lock);
         -: 1015:
         -: 1016:            // finish actual compaction quickly.
-      151: 1017:            to_sleep = MIN_STORAGE_COMPACT_SLEEP;
+      147: 1017:            to_sleep = MIN_STORAGE_COMPACT_SLEEP;
         -: 1018:        } else {
-     1877: 1019:            if (to_sleep < settings.ext_max_sleep)
+     1868: 1019:            if (to_sleep < settings.ext_max_sleep)
         5: 1020:                to_sleep += settings.ext_max_sleep;
         -: 1021:        }
         -: 1022:    }
@@ -1163,30 +1163,30 @@
         -: 1159:    struct extstore_conf ext_cf;
         -: 1160:};
         -: 1161:
-      427: 1162:void *storage_init_config(struct settings *s) {
-      427: 1163:    struct storage_settings *cf = calloc(1, sizeof(struct storage_settings));
+      428: 1162:void *storage_init_config(struct settings *s) {
+      428: 1163:    struct storage_settings *cf = calloc(1, sizeof(struct storage_settings));
         -: 1164:
-      427: 1165:    s->ext_item_size = 512;
-      427: 1166:    s->ext_item_age = UINT_MAX;
-      427: 1167:    s->ext_low_ttl = 0;
-      427: 1168:    s->ext_recache_rate = 2000;
-      427: 1169:    s->ext_max_frag = 0.8;
-      427: 1170:    s->ext_drop_unread = false;
-      427: 1171:    s->ext_wbuf_size = 1024 * 1024 * 4;
-      427: 1172:    s->ext_compact_under = 0;
-      427: 1173:    s->ext_drop_under = 0;
-      427: 1174:    s->ext_max_sleep = 1000000;
-      427: 1175:    s->slab_automove_freeratio = 0.01;
-      427: 1176:    s->ext_page_size = 1024 * 1024 * 64;
-      427: 1177:    s->ext_io_threadcount = 1;
-      427: 1178:    cf->ext_cf.page_size = settings.ext_page_size;
-      427: 1179:    cf->ext_cf.wbuf_size = settings.ext_wbuf_size;
-      427: 1180:    cf->ext_cf.io_threadcount = settings.ext_io_threadcount;
-      427: 1181:    cf->ext_cf.io_depth = 1;
-      427: 1182:    cf->ext_cf.page_buckets = 4;
-      427: 1183:    cf->ext_cf.wbuf_count = cf->ext_cf.page_buckets;
+      428: 1165:    s->ext_item_size = 512;
+      428: 1166:    s->ext_item_age = UINT_MAX;
+      428: 1167:    s->ext_low_ttl = 0;
+      428: 1168:    s->ext_recache_rate = 2000;
+      428: 1169:    s->ext_max_frag = 0.8;
+      428: 1170:    s->ext_drop_unread = false;
+      428: 1171:    s->ext_wbuf_size = 1024 * 1024 * 4;
+      428: 1172:    s->ext_compact_under = 0;
+      428: 1173:    s->ext_drop_under = 0;
+      428: 1174:    s->ext_max_sleep = 1000000;
+      428: 1175:    s->slab_automove_freeratio = 0.01;
+      428: 1176:    s->ext_page_size = 1024 * 1024 * 64;
+      428: 1177:    s->ext_io_threadcount = 1;
+      428: 1178:    cf->ext_cf.page_size = settings.ext_page_size;
+      428: 1179:    cf->ext_cf.wbuf_size = settings.ext_wbuf_size;
+      428: 1180:    cf->ext_cf.io_threadcount = settings.ext_io_threadcount;
+      428: 1181:    cf->ext_cf.io_depth = 1;
+      428: 1182:    cf->ext_cf.page_buckets = 4;
+      428: 1183:    cf->ext_cf.wbuf_count = cf->ext_cf.page_buckets;
         -: 1184:
-      427: 1185:    return cf;
+      428: 1185:    return cf;
         -: 1186:}
         -: 1187:
         -: 1188:// TODO: pass settings struct?
@@ -1397,11 +1397,11 @@
         -: 1393:    return 0;
         -: 1394:}
         -: 1395:
-      120: 1396:int storage_check_config(void *conf) {
-      120: 1397:    struct storage_settings *cf = conf;
-      120: 1398:    struct extstore_conf *ext_cf = &cf->ext_cf;
+      121: 1396:int storage_check_config(void *conf) {
+      121: 1397:    struct storage_settings *cf = conf;
+      121: 1398:    struct extstore_conf *ext_cf = &cf->ext_cf;
         -: 1399:
-      120: 1400:    if (cf->storage_file) {
+      121: 1400:    if (cf->storage_file) {
        11: 1401:        if (settings.item_size_max > ext_cf->wbuf_size) {
     #####: 1402:            fprintf(stderr, "-I (item_size_max: %d) cannot be larger than ext_wbuf_size: %d\n",
         -: 1403:                settings.item_size_max, ext_cf->wbuf_size);

@@ -1,7 +1,7 @@
         -:    0:Source:/usr/include/x86_64-linux-gnu/bits/byteswap.h
         -:    0:Graph:storage.gcno
         -:    0:Data:storage.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* Macros and inline functions to swap the order of bytes in integer values.
         -:    2:   Copyright (C) 1997-2020 Free Software Foundation, Inc.
         -:    3:   This file is part of the GNU C Library.

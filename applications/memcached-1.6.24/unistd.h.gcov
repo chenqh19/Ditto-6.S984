@@ -1,7 +1,7 @@
         -:    0:Source:/usr/include/x86_64-linux-gnu/bits/unistd.h
         -:    0:Graph:thread.gcno
         -:    0:Data:thread.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* Checking macros for unistd functions.
         -:    2:   Copyright (C) 2005-2020 Free Software Foundation, Inc.
         -:    3:   This file is part of the GNU C Library.
@@ -35,17 +35,17 @@
         -:   31:		       "the destination buffer");
         -:   32:
         -:   33:__fortify_function __wur ssize_t
-     2539:   34:read (int __fd, void *__buf, size_t __nbytes)
+     2566:   34:read (int __fd, void *__buf, size_t __nbytes)
         -:   35:{
-     2539:   36:  if (__bos0 (__buf) != (size_t) -1)
+     2566:   36:  if (__bos0 (__buf) != (size_t) -1)
         -:   37:    {
-     2539:   38:      if (!__builtin_constant_p (__nbytes))
+     2566:   38:      if (!__builtin_constant_p (__nbytes))
         -:   39:	return __read_chk (__fd, __buf, __nbytes, __bos0 (__buf));
         -:   40:
-     2539:   41:      if (__nbytes > __bos0 (__buf))
+     2566:   41:      if (__nbytes > __bos0 (__buf))
         -:   42:	return __read_chk_warn (__fd, __buf, __nbytes, __bos0 (__buf));
         -:   43:    }
-     2539:   44:  return __read_alias (__fd, __buf, __nbytes);
+     2566:   44:  return __read_alias (__fd, __buf, __nbytes);
         -:   45:}
         -:   46:
         -:   47:#ifdef __USE_UNIX98

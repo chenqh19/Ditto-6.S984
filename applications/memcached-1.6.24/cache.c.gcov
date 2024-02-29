@@ -1,7 +1,7 @@
         -:    0:Source:cache.c
         -:    0:Graph:cache.gcno
         -:    0:Data:cache.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
         -:    2:#include <stdlib.h>
         -:    3:#include <string.h>
@@ -19,25 +19,25 @@
         -:   15:int cache_error = 0;
         -:   16:#endif
         -:   17:
-     1500:   18:cache_t* cache_create(const char *name, size_t bufsize, size_t align) {
-     1500:   19:    cache_t* ret = calloc(1, sizeof(cache_t));
-     1500:   20:    char* nm = strdup(name);
-     3000:   21:    if (ret == NULL || nm == NULL ||
-     1500:   22:        pthread_mutex_init(&ret->mutex, NULL) == -1) {
+     1512:   18:cache_t* cache_create(const char *name, size_t bufsize, size_t align) {
+     1512:   19:    cache_t* ret = calloc(1, sizeof(cache_t));
+     1512:   20:    char* nm = strdup(name);
+     3024:   21:    if (ret == NULL || nm == NULL ||
+     1512:   22:        pthread_mutex_init(&ret->mutex, NULL) == -1) {
     #####:   23:        free(ret);
     #####:   24:        free(nm);
     #####:   25:        return NULL;
         -:   26:    }
         -:   27:
-     1500:   28:    ret->name = nm;
-     1500:   29:    STAILQ_INIT(&ret->head);
+     1512:   28:    ret->name = nm;
+     1512:   29:    STAILQ_INIT(&ret->head);
         -:   30:
         -:   31:#ifndef NDEBUG
-     1500:   32:    ret->bufsize = bufsize + 2 * sizeof(redzone_pattern);
+     1512:   32:    ret->bufsize = bufsize + 2 * sizeof(redzone_pattern);
         -:   33:#else
         -:   34:    ret->bufsize = bufsize;
         -:   35:#endif
-    1500*:   36:    assert(ret->bufsize >= sizeof(struct cache_free_s));
+    1512*:   36:    assert(ret->bufsize >= sizeof(struct cache_free_s));
         -:   37:
         -:   38:    return ret;
         -:   39:}
@@ -48,10 +48,10 @@
        32:   44:    pthread_mutex_unlock(&cache->mutex);
        32:   45:}
         -:   46:
-   466205:   47:static inline void* get_object(void *ptr) {
+   465863:   47:static inline void* get_object(void *ptr) {
         -:   48:#ifndef NDEBUG
-   466205:   49:    uint64_t *pre = ptr;
-   466205:   50:    return pre + 1;
+   465863:   49:    uint64_t *pre = ptr;
+   465863:   50:    return pre + 1;
         -:   51:#else
         -:   52:    return ptr;
         -:   53:#endif
@@ -76,37 +76,37 @@
      2230:   72:    return ret;
         -:   73:}
         -:   74:
-   466207:   75:void* do_cache_alloc(cache_t *cache) {
-   466207:   76:    void *ret;
-   466207:   77:    void *object;
-   466207:   78:    if (cache->freecurr > 0) {
-   464222:   79:        ret = STAILQ_FIRST(&cache->head);
-   464222:   80:        STAILQ_REMOVE_HEAD(&cache->head, c_next);
-   464222:   81:        object = get_object(ret);
-   464222:   82:        cache->freecurr--;
-     1985:   83:    } else if (cache->limit == 0 || cache->total < cache->limit) {
-     1983:   84:        object = ret = malloc(cache->bufsize);
-     1983:   85:        if (ret != NULL) {
-     1983:   86:            object = get_object(ret);
+   465865:   75:void* do_cache_alloc(cache_t *cache) {
+   465865:   76:    void *ret;
+   465865:   77:    void *object;
+   465865:   78:    if (cache->freecurr > 0) {
+   463887:   79:        ret = STAILQ_FIRST(&cache->head);
+   463887:   80:        STAILQ_REMOVE_HEAD(&cache->head, c_next);
+   463887:   81:        object = get_object(ret);
+   463887:   82:        cache->freecurr--;
+     1978:   83:    } else if (cache->limit == 0 || cache->total < cache->limit) {
+     1976:   84:        object = ret = malloc(cache->bufsize);
+     1976:   85:        if (ret != NULL) {
+     1976:   86:            object = get_object(ret);
         -:   87:
-     1983:   88:            cache->total++;
+     1976:   88:            cache->total++;
         -:   89:        }
         -:   90:    } else {
         -:   91:        object = NULL;
         -:   92:    }
         -:   93:
         -:   94:#ifndef NDEBUG
-   466205:   95:    if (object != NULL) {
+   465863:   95:    if (object != NULL) {
         -:   96:        /* add a simple form of buffer-check */
-   466205:   97:        uint64_t *pre = ret;
-   466205:   98:        *pre = redzone_pattern;
-   466205:   99:        ret = pre+1;
-   466205:  100:        memcpy(((char*)ret) + cache->bufsize - (2 * sizeof(redzone_pattern)),
+   465863:   97:        uint64_t *pre = ret;
+   465863:   98:        *pre = redzone_pattern;
+   465863:   99:        ret = pre+1;
+   465863:  100:        memcpy(((char*)ret) + cache->bufsize - (2 * sizeof(redzone_pattern)),
         -:  101:               &redzone_pattern, sizeof(redzone_pattern));
         -:  102:    }
         -:  103:#endif
         -:  104:
-   466207:  105:    return object;
+   465865:  105:    return object;
         -:  106:}
         -:  107:
      2230:  108:void cache_free(cache_t *cache, void *ptr) {
@@ -115,30 +115,30 @@
      2230:  111:    pthread_mutex_unlock(&cache->mutex);
      2230:  112:}
         -:  113:
-   466080:  114:void do_cache_free(cache_t *cache, void *ptr) {
+   465738:  114:void do_cache_free(cache_t *cache, void *ptr) {
         -:  115:#ifndef NDEBUG
         -:  116:    /* validate redzone... */
-   466080:  117:    if (memcmp(((char*)ptr) + cache->bufsize - (2 * sizeof(redzone_pattern)),
+   465738:  117:    if (memcmp(((char*)ptr) + cache->bufsize - (2 * sizeof(redzone_pattern)),
         -:  118:               &redzone_pattern, sizeof(redzone_pattern)) != 0) {
     #####:  119:        raise(SIGABRT);
     #####:  120:        cache_error = 1;
     #####:  121:        return;
         -:  122:    }
-   466080:  123:    uint64_t *pre = ptr;
-   466080:  124:    --pre;
-   466080:  125:    if (*pre != redzone_pattern) {
+   465738:  123:    uint64_t *pre = ptr;
+   465738:  124:    --pre;
+   465738:  125:    if (*pre != redzone_pattern) {
     #####:  126:        raise(SIGABRT);
     #####:  127:        cache_error = -1;
     #####:  128:        return;
         -:  129:    }
-   466080:  130:    ptr = pre;
+   465738:  130:    ptr = pre;
         -:  131:#endif
-   466080:  132:    if (cache->limit != 0 && cache->limit < cache->total) {
+   465738:  132:    if (cache->limit != 0 && cache->limit < cache->total) {
     #####:  133:        free(ptr);
     #####:  134:        cache->total--;
         -:  135:    } else {
-   466080:  136:        STAILQ_INSERT_HEAD(&cache->head, (struct cache_free_s *)ptr, c_next);
-   466080:  137:        cache->freecurr++;
+   465738:  136:        STAILQ_INSERT_HEAD(&cache->head, (struct cache_free_s *)ptr, c_next);
+   465738:  137:        cache->freecurr++;
         -:  138:    }
         -:  139:}
         -:  140:

@@ -1,7 +1,7 @@
         -:    0:Source:stats_prefix.c
         -:    0:Graph:stats_prefix.gcno
         -:    0:Data:stats_prefix.gcda
-        -:    0:Runs:427
+        -:    0:Runs:428
         -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
         -:    2:/* Author: Steven Grimm <sgrimm@facebook.com> */
         -:    3:#include "memcached.h"
@@ -17,10 +17,10 @@
         -:   13:static int num_prefixes = 0;
         -:   14:static int total_prefix_size = 0;
         -:   15:
-      119:   16:void stats_prefix_init(char delimiter) {
-      119:   17:    prefix_delimiter = delimiter;
-      119:   18:    memset(prefix_stats, 0, sizeof(prefix_stats));
-      119:   19:}
+      120:   16:void stats_prefix_init(char delimiter) {
+      120:   17:    prefix_delimiter = delimiter;
+      120:   18:    memset(prefix_stats, 0, sizeof(prefix_stats));
+      120:   19:}
         -:   20:
         3:   21:void stats_prefix_clear(void) {
         3:   22:    int i;
