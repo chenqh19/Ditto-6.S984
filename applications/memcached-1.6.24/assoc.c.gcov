@@ -1,0 +1,369 @@
+        -:    0:Source:assoc.c
+        -:    0:Graph:assoc.gcno
+        -:    0:Data:assoc.gcda
+        -:    0:Runs:427
+        -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+        -:    2:/*
+        -:    3: * Hash table
+        -:    4: *
+        -:    5: * The hash function used here is by Bob Jenkins, 1996:
+        -:    6: *    <http://burtleburtle.net/bob/hash/doobs.html>
+        -:    7: *       "By Bob Jenkins, 1996.  bob_jenkins@burtleburtle.net.
+        -:    8: *       You may use this code any way you wish, private, educational,
+        -:    9: *       or commercial.  It's free."
+        -:   10: *
+        -:   11: * The rest of the file is licensed under the BSD license.  See LICENSE.
+        -:   12: */
+        -:   13:
+        -:   14:#include "memcached.h"
+        -:   15:#include <sys/stat.h>
+        -:   16:#include <sys/socket.h>
+        -:   17:#include <sys/resource.h>
+        -:   18:#include <signal.h>
+        -:   19:#include <fcntl.h>
+        -:   20:#include <netinet/in.h>
+        -:   21:#include <errno.h>
+        -:   22:#include <stdlib.h>
+        -:   23:#include <stdio.h>
+        -:   24:#include <string.h>
+        -:   25:#include <assert.h>
+        -:   26:#include <pthread.h>
+        -:   27:
+        -:   28:static pthread_cond_t maintenance_cond = PTHREAD_COND_INITIALIZER;
+        -:   29:static pthread_mutex_t maintenance_lock = PTHREAD_MUTEX_INITIALIZER;
+        -:   30:
+        -:   31:/* how many powers of 2's worth of buckets we use */
+        -:   32:unsigned int hashpower = HASHPOWER_DEFAULT;
+        -:   33:
+        -:   34:#define hashsize(n) ((uint64_t)1<<(n))
+        -:   35:#define hashmask(n) (hashsize(n)-1)
+        -:   36:
+        -:   37:/* Main hash table. This is where we look except during expansion. */
+        -:   38:static item** primary_hashtable = 0;
+        -:   39:
+        -:   40:/*
+        -:   41: * Previous hash table. During expansion, we look here for keys that haven't
+        -:   42: * been moved over to the primary yet.
+        -:   43: */
+        -:   44:static item** old_hashtable = 0;
+        -:   45:
+        -:   46:/* Flag: Are we in the middle of expanding now? */
+        -:   47:static bool expanding = false;
+        -:   48:
+        -:   49:/*
+        -:   50: * During expansion we migrate values with bucket granularity; this is how
+        -:   51: * far we've gotten so far. Ranges from 0 .. hashsize(hashpower - 1) - 1.
+        -:   52: */
+        -:   53:static uint64_t expand_bucket = 0;
+        -:   54:
+      119:   55:void assoc_init(const int hashtable_init) {
+      119:   56:    if (hashtable_init) {
+        1:   57:        hashpower = hashtable_init;
+        -:   58:    }
+      119:   59:    primary_hashtable = calloc(hashsize(hashpower), sizeof(void *));
+      119:   60:    if (! primary_hashtable) {
+    #####:   61:        fprintf(stderr, "Failed to init hashtable.\n");
+    #####:   62:        exit(EXIT_FAILURE);
+        -:   63:    }
+      119:   64:    STATS_LOCK();
+      119:   65:    stats_state.hash_power_level = hashpower;
+      119:   66:    stats_state.hash_bytes = hashsize(hashpower) * sizeof(void *);
+      119:   67:    STATS_UNLOCK();
+      119:   68:}
+        -:   69:
+   617245:   70:item *assoc_find(const char *key, const size_t nkey, const uint32_t hv) {
+   617245:   71:    item *it;
+   617245:   72:    uint64_t oldbucket;
+        -:   73:
+   617245:   74:    if (expanding &&
+      191:   75:        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
+        -:   76:    {
+      190:   77:        it = old_hashtable[oldbucket];
+        -:   78:    } else {
+   617055:   79:        it = primary_hashtable[hv & hashmask(hashpower)];
+        -:   80:    }
+        -:   81:
+   793402:   82:    item *ret = NULL;
+        -:   83:#ifdef ENABLE_DTRACE
+        -:   84:    int depth = 0;
+        -:   85:#endif
+   793402:   86:    while (it) {
+   417207:   87:        if ((nkey == it->nkey) && (memcmp(key, ITEM_key(it), nkey) == 0)) {
+        -:   88:            ret = it;
+        -:   89:            break;
+        -:   90:        }
+   176157:   91:        it = it->h_next;
+        -:   92:#ifdef ENABLE_DTRACE
+        -:   93:        ++depth;
+        -:   94:#endif
+        -:   95:    }
+   617245:   96:    MEMCACHED_ASSOC_FIND(key, nkey, depth);
+   617245:   97:    return ret;
+        -:   98:}
+        -:   99:
+        -:  100:/* returns the address of the item pointer before the key.  if *item == 0,
+        -:  101:   the item wasn't found */
+        -:  102:
+   228535:  103:static item** _hashitem_before (const char *key, const size_t nkey, const uint32_t hv) {
+   228535:  104:    item **pos;
+   228535:  105:    uint64_t oldbucket;
+        -:  106:
+  228535*:  107:    if (expanding &&
+    #####:  108:        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
+        -:  109:    {
+    #####:  110:        pos = &old_hashtable[oldbucket];
+        -:  111:    } else {
+   228535:  112:        pos = &primary_hashtable[hv & hashmask(hashpower)];
+        -:  113:    }
+        -:  114:
+   233031:  115:    while (*pos && ((nkey != (*pos)->nkey) || memcmp(key, ITEM_key(*pos), nkey))) {
+     4496:  116:        pos = &(*pos)->h_next;
+        -:  117:    }
+   228535:  118:    return pos;
+        -:  119:}
+        -:  120:
+        -:  121:/* grows the hashtable to the next power of 2. */
+        1:  122:static void assoc_expand(void) {
+        1:  123:    old_hashtable = primary_hashtable;
+        -:  124:
+        1:  125:    primary_hashtable = calloc(hashsize(hashpower + 1), sizeof(void *));
+        1:  126:    if (primary_hashtable) {
+        1:  127:        if (settings.verbose > 1)
+    #####:  128:            fprintf(stderr, "Hash table expansion starting\n");
+        1:  129:        hashpower++;
+        1:  130:        expanding = true;
+        1:  131:        expand_bucket = 0;
+        1:  132:        STATS_LOCK();
+        1:  133:        stats_state.hash_power_level = hashpower;
+        1:  134:        stats_state.hash_bytes += hashsize(hashpower) * sizeof(void *);
+        1:  135:        stats_state.hash_is_expanding = true;
+        1:  136:        STATS_UNLOCK();
+        -:  137:    } else {
+    #####:  138:        primary_hashtable = old_hashtable;
+        -:  139:        /* Bad news, but we can keep running. */
+        -:  140:    }
+        1:  141:}
+        -:  142:
+      481:  143:void assoc_start_expand(uint64_t curr_items) {
+      481:  144:    if (pthread_mutex_trylock(&maintenance_lock) == 0) {
+      478:  145:        if (curr_items > (hashsize(hashpower) * 3) / 2 && hashpower < HASHPOWER_MAX) {
+        1:  146:            pthread_cond_signal(&maintenance_cond);
+        -:  147:        }
+      478:  148:        pthread_mutex_unlock(&maintenance_lock);
+        -:  149:    }
+      481:  150:}
+        -:  151:
+        -:  152:/* Note: this isn't an assoc_update.  The key must not already exist to call this */
+   350773:  153:int assoc_insert(item *it, const uint32_t hv) {
+   350773:  154:    uint64_t oldbucket;
+        -:  155:
+        -:  156://    assert(assoc_find(ITEM_key(it), it->nkey) == 0);  /* shouldn't have duplicately named things defined */
+        -:  157:
+   350773:  158:    if (expanding &&
+      191:  159:        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
+        -:  160:    {
+      190:  161:        it->h_next = old_hashtable[oldbucket];
+      190:  162:        old_hashtable[oldbucket] = it;
+        -:  163:    } else {
+   350583:  164:        it->h_next = primary_hashtable[hv & hashmask(hashpower)];
+   350583:  165:        primary_hashtable[hv & hashmask(hashpower)] = it;
+        -:  166:    }
+        -:  167:
+   350773:  168:    MEMCACHED_ASSOC_INSERT(ITEM_key(it), it->nkey);
+   350773:  169:    return 1;
+        -:  170:}
+        -:  171:
+   228535:  172:void assoc_delete(const char *key, const size_t nkey, const uint32_t hv) {
+   228535:  173:    item **before = _hashitem_before(key, nkey, hv);
+        -:  174:
+   228535:  175:    if (*before) {
+   228535:  176:        item *nxt;
+        -:  177:        /* The DTrace probe cannot be triggered as the last instruction
+        -:  178:         * due to possible tail-optimization by the compiler
+        -:  179:         */
+   228535:  180:        MEMCACHED_ASSOC_DELETE(key, nkey);
+   228535:  181:        nxt = (*before)->h_next;
+   228535:  182:        (*before)->h_next = 0;   /* probably pointless, but whatever. */
+   228535:  183:        *before = nxt;
+   228535:  184:        return;
+        -:  185:    }
+        -:  186:    /* Note:  we never actually get here.  the callers don't delete things
+        -:  187:       they can't find. */
+    #####:  188:    assert(*before != 0);
+        -:  189:}
+        -:  190:
+        -:  191:
+        -:  192:static volatile int do_run_maintenance_thread = 1;
+        -:  193:
+        -:  194:#define DEFAULT_HASH_BULK_MOVE 1
+        -:  195:int hash_bulk_move = DEFAULT_HASH_BULK_MOVE;
+        -:  196:
+      118:  197:static void *assoc_maintenance_thread(void *arg) {
+        -:  198:
+      118:  199:    mutex_lock(&maintenance_lock);
+    65775:  200:    while (do_run_maintenance_thread) {
+        -:  201:        int ii = 0;
+        -:  202:
+        -:  203:        /* There is only one expansion thread, so no need to global lock. */
+   131192:  204:        for (ii = 0; ii < hash_bulk_move && expanding; ++ii) {
+    65537:  205:            item *it, *next;
+    65537:  206:            uint64_t bucket;
+    65537:  207:            void *item_lock = NULL;
+        -:  208:
+        -:  209:            /* bucket = hv & hashmask(hashpower) =>the bucket of hash table
+        -:  210:             * is the lowest N bits of the hv, and the bucket of item_locks is
+        -:  211:             *  also the lowest M bits of hv, and N is greater than M.
+        -:  212:             *  So we can process expanding with only one item_lock. cool! */
+    65537:  213:            if ((item_lock = item_trylock(expand_bucket))) {
+   196627:  214:                    for (it = old_hashtable[expand_bucket]; NULL != it; it = next) {
+   131091:  215:                        next = it->h_next;
+   131091:  216:                        bucket = hash(ITEM_key(it), it->nkey) & hashmask(hashpower);
+   131091:  217:                        it->h_next = primary_hashtable[bucket];
+   131091:  218:                        primary_hashtable[bucket] = it;
+        -:  219:                    }
+        -:  220:
+    65536:  221:                    old_hashtable[expand_bucket] = NULL;
+        -:  222:
+    65536:  223:                    expand_bucket++;
+    65536:  224:                    if (expand_bucket == hashsize(hashpower - 1)) {
+        1:  225:                        expanding = false;
+        1:  226:                        free(old_hashtable);
+        1:  227:                        STATS_LOCK();
+        1:  228:                        stats_state.hash_bytes -= hashsize(hashpower - 1) * sizeof(void *);
+        1:  229:                        stats_state.hash_is_expanding = false;
+        1:  230:                        STATS_UNLOCK();
+        1:  231:                        if (settings.verbose > 1)
+    #####:  232:                            fprintf(stderr, "Hash table expansion done\n");
+        -:  233:                    }
+        -:  234:
+        -:  235:            } else {
+        1:  236:                usleep(10*1000);
+        -:  237:            }
+        -:  238:
+    65537:  239:            if (item_lock) {
+    65536:  240:                item_trylock_unlock(item_lock);
+    65536:  241:                item_lock = NULL;
+        -:  242:            }
+        -:  243:        }
+        -:  244:
+    65655:  245:        if (!expanding) {
+        -:  246:            /* We are done expanding.. just wait for next invocation */
+      119:  247:            pthread_cond_wait(&maintenance_cond, &maintenance_lock);
+        -:  248:            /* assoc_expand() swaps out the hash table entirely, so we need
+        -:  249:             * all threads to not hold any references related to the hash
+        -:  250:             * table while this happens.
+        -:  251:             * This is instead of a more complex, possibly slower algorithm to
+        -:  252:             * allow dynamic hash table expansion without causing significant
+        -:  253:             * wait times.
+        -:  254:             */
+        3:  255:            if (do_run_maintenance_thread) {
+        1:  256:                pause_threads(PAUSE_ALL_THREADS);
+        1:  257:                assoc_expand();
+        1:  258:                pause_threads(RESUME_ALL_THREADS);
+        -:  259:            }
+        -:  260:        }
+        -:  261:    }
+        2:  262:    mutex_unlock(&maintenance_lock);
+        2:  263:    return NULL;
+        -:  264:}
+        -:  265:
+        -:  266:static pthread_t maintenance_tid;
+        -:  267:
+      118:  268:int start_assoc_maintenance_thread(void) {
+      118:  269:    int ret;
+      118:  270:    char *env = getenv("MEMCACHED_HASH_BULK_MOVE");
+      118:  271:    if (env != NULL) {
+    #####:  272:        hash_bulk_move = atoi(env);
+    #####:  273:        if (hash_bulk_move == 0) {
+    #####:  274:            hash_bulk_move = DEFAULT_HASH_BULK_MOVE;
+        -:  275:        }
+        -:  276:    }
+        -:  277:
+      118:  278:    if ((ret = pthread_create(&maintenance_tid, NULL,
+        -:  279:                              assoc_maintenance_thread, NULL)) != 0) {
+    #####:  280:        fprintf(stderr, "Can't create thread: %s\n", strerror(ret));
+    #####:  281:        return -1;
+        -:  282:    }
+      118:  283:    thread_setname(maintenance_tid, "mc-assocmaint");
+      118:  284:    return 0;
+        -:  285:}
+        -:  286:
+        2:  287:void stop_assoc_maintenance_thread(void) {
+        2:  288:    mutex_lock(&maintenance_lock);
+        2:  289:    do_run_maintenance_thread = 0;
+        2:  290:    pthread_cond_signal(&maintenance_cond);
+        2:  291:    mutex_unlock(&maintenance_lock);
+        -:  292:
+        -:  293:    /* Wait for the maintenance thread to stop */
+        2:  294:    pthread_join(maintenance_tid, NULL);
+        2:  295:}
+        -:  296:
+        -:  297:struct assoc_iterator {
+        -:  298:    uint64_t bucket;
+        -:  299:    item *it;
+        -:  300:    item *next;
+        -:  301:    bool bucket_locked;
+        -:  302:};
+        -:  303:
+        1:  304:void *assoc_get_iterator(void) {
+        1:  305:    struct assoc_iterator *iter = calloc(1, sizeof(struct assoc_iterator));
+        1:  306:    if (iter == NULL) {
+        -:  307:        return NULL;
+        -:  308:    }
+        -:  309:    // this will hang the caller while a hash table expansion is running.
+        1:  310:    mutex_lock(&maintenance_lock);
+        1:  311:    return iter;
+        -:  312:}
+        -:  313:
+   135627:  314:bool assoc_iterate(void *iterp, item **it) {
+   135627:  315:    struct assoc_iterator *iter = (struct assoc_iterator *) iterp;
+   135627:  316:    *it = NULL;
+        -:  317:    // - if locked bucket and next, update next and return
+   135627:  318:    if (iter->bucket_locked) {
+    70090:  319:        if (iter->next != NULL) {
+    26988:  320:            iter->it = iter->next;
+    26988:  321:            iter->next = iter->it->h_next;
+    26988:  322:            *it = iter->it;
+        -:  323:        } else {
+        -:  324:            // unlock previous bucket, if any
+    43102:  325:            item_unlock(iter->bucket);
+        -:  326:            // iterate the bucket post since it starts at 0.
+    43102:  327:            iter->bucket++;
+    43102:  328:            iter->bucket_locked = false;
+    43102:  329:            *it = NULL;
+        -:  330:        }
+    70090:  331:        return true;
+        -:  332:    }
+        -:  333:
+        -:  334:    // - loop until we hit the end or find something.
+    65537:  335:    if (iter->bucket != hashsize(hashpower)) {
+        -:  336:        // - lock next bucket
+    65536:  337:        item_lock(iter->bucket);
+    65536:  338:        iter->bucket_locked = true;
+        -:  339:        // - only check the primary hash table since expand is blocked.
+    65536:  340:        iter->it = primary_hashtable[iter->bucket];
+    65536:  341:        if (iter->it != NULL) {
+        -:  342:            // - set it, next and return
+    43102:  343:            iter->next = iter->it->h_next;
+    43102:  344:            *it = iter->it;
+        -:  345:        } else {
+        -:  346:            // - nothing found in this bucket, try next.
+    22434:  347:            item_unlock(iter->bucket);
+    22434:  348:            iter->bucket_locked = false;
+    22434:  349:            iter->bucket++;
+        -:  350:        }
+        -:  351:    } else {
+        -:  352:        return false;
+        -:  353:    }
+        -:  354:
+        -:  355:    return true;
+        -:  356:}
+        -:  357:
+        1:  358:void assoc_iterate_final(void *iterp) {
+        1:  359:    struct assoc_iterator *iter = (struct assoc_iterator *) iterp;
+        1:  360:    if (iter->bucket_locked) {
+    #####:  361:        item_unlock(iter->bucket);
+        -:  362:    }
+        1:  363:    mutex_unlock(&maintenance_lock);
+        1:  364:    free(iter);
+        1:  365:}

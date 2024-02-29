@@ -69,7 +69,7 @@ for details.
 .It Fl p Ar prefix
 Set the prefix path.
 The default value is
-.Pa /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build .
+.Pa /usr/local/nginx .
 .It Fl q
 Suppress non-error messages during configuration testing.
 .It Fl s Ar signal
@@ -172,13 +172,13 @@ environment variable is used internally by
 and should not be set directly by the user.
 .Sh FILES
 .Bl -tag -width indent
-.It Pa /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/nginx.pid
+.It Pa /usr/local/nginx/logs/nginx.pid
 Contains the process ID of
 .Nm .
 The contents of this file are not sensitive, so it can be world-readable.
-.It Pa /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/nginx.conf
+.It Pa /usr/local/nginx/conf/nginx.conf
 The main configuration file.
-.It Pa /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/error.log
+.It Pa /usr/local/nginx/logs/error.log
 Error log file.
 .El
 .Sh EXIT STATUS

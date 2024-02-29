@@ -1,7 +1,7 @@
-#define NGX_CONFIGURE " --prefix=/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build"
+#define NGX_CONFIGURE ""
 
 #ifndef NGX_COMPILER
-#define NGX_COMPILER  "gcc 7.5.0 (Ubuntu 7.5.0-3ubuntu1~18.04) "
+#define NGX_COMPILER  "gcc 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.2) "
 #endif
 
 
@@ -409,7 +409,7 @@
 
 
 #ifndef NGX_PREFIX
-#define NGX_PREFIX  "/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/"
+#define NGX_PREFIX  "/usr/local/nginx/"
 #endif
 
 

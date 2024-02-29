@@ -1196,64 +1196,64 @@ objs/src/http/modules/ngx_http_upstream_zone_module.o:	$(CORE_DEPS) $(HTTP_DEPS)
 manpage:	objs/nginx.8
 
 objs/nginx.8:	man/nginx.8 objs/ngx_auto_config.h
-	sed -e "s|%%PREFIX%%|/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build|" \
-		-e "s|%%PID_PATH%%|/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/nginx.pid|" \
-		-e "s|%%CONF_PATH%%|/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/nginx.conf|" \
-		-e "s|%%ERROR_LOG_PATH%%|/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/error.log|" \
+	sed -e "s|%%PREFIX%%|/usr/local/nginx|" \
+		-e "s|%%PID_PATH%%|/usr/local/nginx/logs/nginx.pid|" \
+		-e "s|%%CONF_PATH%%|/usr/local/nginx/conf/nginx.conf|" \
+		-e "s|%%ERROR_LOG_PATH%%|/usr/local/nginx/logs/error.log|" \
 		< man/nginx.8 > $@
 
 install:	build 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build' || mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build'
+	test -d '$(DESTDIR)/usr/local/nginx' || mkdir -p '$(DESTDIR)/usr/local/nginx'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin' \
-		|| mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin'
-	test ! -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin/nginx' \
-		|| mv '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin/nginx' \
-			'$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin/nginx.old'
-	cp objs/nginx '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin/nginx'
+	test -d '$(DESTDIR)/usr/local/nginx/sbin' \
+		|| mkdir -p '$(DESTDIR)/usr/local/nginx/sbin'
+	test ! -f '$(DESTDIR)/usr/local/nginx/sbin/nginx' \
+		|| mv '$(DESTDIR)/usr/local/nginx/sbin/nginx' \
+			'$(DESTDIR)/usr/local/nginx/sbin/nginx.old'
+	cp objs/nginx '$(DESTDIR)/usr/local/nginx/sbin/nginx'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf' \
-		|| mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
+	test -d '$(DESTDIR)/usr/local/nginx/conf' \
+		|| mkdir -p '$(DESTDIR)/usr/local/nginx/conf'
 
-	cp conf/koi-win '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
-	cp conf/koi-utf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
-	cp conf/win-utf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
+	cp conf/koi-win '$(DESTDIR)/usr/local/nginx/conf'
+	cp conf/koi-utf '$(DESTDIR)/usr/local/nginx/conf'
+	cp conf/win-utf '$(DESTDIR)/usr/local/nginx/conf'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/mime.types' \
-		|| cp conf/mime.types '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
-	cp conf/mime.types '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/mime.types.default'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/mime.types' \
+		|| cp conf/mime.types '$(DESTDIR)/usr/local/nginx/conf'
+	cp conf/mime.types '$(DESTDIR)/usr/local/nginx/conf/mime.types.default'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/fastcgi_params' \
-		|| cp conf/fastcgi_params '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/fastcgi_params' \
+		|| cp conf/fastcgi_params '$(DESTDIR)/usr/local/nginx/conf'
 	cp conf/fastcgi_params \
-		'$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/fastcgi_params.default'
+		'$(DESTDIR)/usr/local/nginx/conf/fastcgi_params.default'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/fastcgi.conf' \
-		|| cp conf/fastcgi.conf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
-	cp conf/fastcgi.conf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/fastcgi.conf.default'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/fastcgi.conf' \
+		|| cp conf/fastcgi.conf '$(DESTDIR)/usr/local/nginx/conf'
+	cp conf/fastcgi.conf '$(DESTDIR)/usr/local/nginx/conf/fastcgi.conf.default'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/uwsgi_params' \
-		|| cp conf/uwsgi_params '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/uwsgi_params' \
+		|| cp conf/uwsgi_params '$(DESTDIR)/usr/local/nginx/conf'
 	cp conf/uwsgi_params \
-		'$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/uwsgi_params.default'
+		'$(DESTDIR)/usr/local/nginx/conf/uwsgi_params.default'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/scgi_params' \
-		|| cp conf/scgi_params '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/scgi_params' \
+		|| cp conf/scgi_params '$(DESTDIR)/usr/local/nginx/conf'
 	cp conf/scgi_params \
-		'$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/scgi_params.default'
+		'$(DESTDIR)/usr/local/nginx/conf/scgi_params.default'
 
-	test -f '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/nginx.conf' \
-		|| cp conf/nginx.conf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/nginx.conf'
-	cp conf/nginx.conf '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/conf/nginx.conf.default'
+	test -f '$(DESTDIR)/usr/local/nginx/conf/nginx.conf' \
+		|| cp conf/nginx.conf '$(DESTDIR)/usr/local/nginx/conf/nginx.conf'
+	cp conf/nginx.conf '$(DESTDIR)/usr/local/nginx/conf/nginx.conf.default'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs' \
-		|| mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs'
+	test -d '$(DESTDIR)/usr/local/nginx/logs' \
+		|| mkdir -p '$(DESTDIR)/usr/local/nginx/logs'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs' \
-		|| mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs'
+	test -d '$(DESTDIR)/usr/local/nginx/logs' \
+		|| mkdir -p '$(DESTDIR)/usr/local/nginx/logs'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/html' \
-		|| cp -R html '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build'
+	test -d '$(DESTDIR)/usr/local/nginx/html' \
+		|| cp -R html '$(DESTDIR)/usr/local/nginx'
 
-	test -d '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs' \
-		|| mkdir -p '$(DESTDIR)/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs'
+	test -d '$(DESTDIR)/usr/local/nginx/logs' \
+		|| mkdir -p '$(DESTDIR)/usr/local/nginx/logs'

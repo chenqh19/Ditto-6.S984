@@ -16,12 +16,12 @@ modules:
 	$(MAKE) -f objs/Makefile modules
 
 upgrade:
-	/filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/sbin/nginx -t
+	/usr/local/nginx/sbin/nginx -t
 
-	kill -USR2 `cat /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/nginx.pid`
+	kill -USR2 `cat /usr/local/nginx/logs/nginx.pid`
 	sleep 1
-	test -f /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/nginx.pid.oldbin
+	test -f /usr/local/nginx/logs/nginx.pid.oldbin
 
-	kill -QUIT `cat /filer-01/ml2585/Ditto/applications/nginx-1.20.1/build/logs/nginx.pid.oldbin`
+	kill -QUIT `cat /usr/local/nginx/logs/nginx.pid.oldbin`
 
 .PHONY:	build install modules upgrade

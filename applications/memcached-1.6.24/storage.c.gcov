@@ -1,0 +1,1450 @@
+        -:    0:Source:storage.c
+        -:    0:Graph:storage.gcno
+        -:    0:Data:storage.gcda
+        -:    0:Runs:427
+        -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+        -:    2:#include "memcached.h"
+        -:    3:#ifdef EXTSTORE
+        -:    4:
+        -:    5:#include "storage.h"
+        -:    6:#include "extstore.h"
+        -:    7:#include <stdlib.h>
+        -:    8:#include <stdio.h>
+        -:    9:#include <stddef.h>
+        -:   10:#include <string.h>
+        -:   11:#include <limits.h>
+        -:   12:#include <ctype.h>
+        -:   13:
+        -:   14:#define PAGE_BUCKET_DEFAULT 0
+        -:   15:#define PAGE_BUCKET_COMPACT 1
+        -:   16:#define PAGE_BUCKET_CHUNKED 2
+        -:   17:#define PAGE_BUCKET_LOWTTL  3
+        -:   18:
+        -:   19:/*
+        -:   20: * API functions
+        -:   21: */
+        -:   22:static void storage_finalize_cb(io_pending_t *pending);
+        -:   23:static void storage_return_cb(io_pending_t *pending);
+        -:   24:
+        -:   25:// re-cast an io_pending_t into this more descriptive structure.
+        -:   26:// the first few items _must_ match the original struct.
+        -:   27:typedef struct _io_pending_storage_t {
+        -:   28:    int io_queue_type;
+        -:   29:    LIBEVENT_THREAD *thread;
+        -:   30:    conn *c;
+        -:   31:    mc_resp *resp;
+        -:   32:    io_queue_cb return_cb;    // called on worker thread.
+        -:   33:    io_queue_cb finalize_cb;  // called back on the worker thread.
+        -:   34:    STAILQ_ENTRY(io_pending_t) iop_next; // queue chain.
+        -:   35:                              /* original struct ends here */
+        -:   36:    item *hdr_it;             /* original header item. */
+        -:   37:    obj_io io_ctx;            /* embedded extstore IO header */
+        -:   38:    unsigned int iovec_data;  /* specific index of data iovec */
+        -:   39:    bool noreply;             /* whether the response had noreply set */
+        -:   40:    bool miss;                /* signal a miss to unlink hdr_it */
+        -:   41:    bool badcrc;              /* signal a crc failure */
+        -:   42:    bool active;              /* tells if IO was dispatched or not */
+        -:   43:} io_pending_storage_t;
+        -:   44:
+        -:   45:// Only call this if item has ITEM_HDR
+     6100:   46:bool storage_validate_item(void *e, item *it) {
+     6100:   47:    item_hdr *hdr = (item_hdr *)ITEM_data(it);
+     6100:   48:    if (extstore_check(e, hdr->page_id, hdr->page_version) != 0) {
+        -:   49:        return false;
+        -:   50:    } else {
+     6100:   51:        return true;
+        -:   52:    }
+        -:   53:}
+        -:   54:
+   204467:   55:void storage_delete(void *e, item *it) {
+   204467:   56:    if (it->it_flags & ITEM_HDR) {
+     9697:   57:        item_hdr *hdr = (item_hdr *)ITEM_data(it);
+     9697:   58:        extstore_delete(e, hdr->page_id, hdr->page_version,
+     9697:   59:                1, ITEM_ntotal(it));
+        -:   60:    }
+   204467:   61:}
+        -:   62:
+        -:   63:// Function for the extra stats called from a protocol.
+        -:   64:// NOTE: This either needs a name change or a wrapper, perhaps?
+        -:   65:// it's defined here to reduce exposure of extstore.h to the rest of memcached
+        -:   66:// but feels a little off being defined here.
+        -:   67:// At very least maybe "process_storage_stats" in line with making this more
+        -:   68:// of a generic wrapper module.
+    #####:   69:void process_extstore_stats(ADD_STAT add_stats, conn *c) {
+    #####:   70:    int i;
+    #####:   71:    char key_str[STAT_KEY_LEN];
+    #####:   72:    char val_str[STAT_VAL_LEN];
+    #####:   73:    int klen = 0, vlen = 0;
+    #####:   74:    struct extstore_stats st;
+        -:   75:
+    #####:   76:    assert(add_stats);
+        -:   77:
+    #####:   78:    void *storage = c->thread->storage;
+    #####:   79:    if (storage == NULL) {
+    #####:   80:        return;
+        -:   81:    }
+    #####:   82:    extstore_get_stats(storage, &st);
+    #####:   83:    st.page_data = calloc(st.page_count, sizeof(struct extstore_page_data));
+    #####:   84:    extstore_get_page_data(storage, &st);
+        -:   85:
+    #####:   86:    for (i = 0; i < st.page_count; i++) {
+    #####:   87:        APPEND_NUM_STAT(i, "version", "%llu",
+    #####:   88:                (unsigned long long) st.page_data[i].version);
+    #####:   89:        APPEND_NUM_STAT(i, "bytes", "%llu",
+    #####:   90:                (unsigned long long) st.page_data[i].bytes_used);
+    #####:   91:        APPEND_NUM_STAT(i, "bucket", "%u",
+    #####:   92:                st.page_data[i].bucket);
+    #####:   93:        APPEND_NUM_STAT(i, "free_bucket", "%u",
+    #####:   94:                st.page_data[i].free_bucket);
+        -:   95:    }
+        -:   96:}
+        -:   97:
+        -:   98:// Additional storage stats for the main stats output.
+     3796:   99:void storage_stats(ADD_STAT add_stats, conn *c) {
+     3796:  100:    struct extstore_stats st;
+     3796:  101:    if (c->thread->storage) {
+     1049:  102:        STATS_LOCK();
+     1049:  103:        APPEND_STAT("extstore_compact_lost", "%llu", (unsigned long long)stats.extstore_compact_lost);
+     1049:  104:        APPEND_STAT("extstore_compact_rescues", "%llu", (unsigned long long)stats.extstore_compact_rescues);
+     1049:  105:        APPEND_STAT("extstore_compact_skipped", "%llu", (unsigned long long)stats.extstore_compact_skipped);
+     1049:  106:        STATS_UNLOCK();
+     1049:  107:        extstore_get_stats(c->thread->storage, &st);
+     1049:  108:        APPEND_STAT("extstore_page_allocs", "%llu", (unsigned long long)st.page_allocs);
+     1049:  109:        APPEND_STAT("extstore_page_evictions", "%llu", (unsigned long long)st.page_evictions);
+     1049:  110:        APPEND_STAT("extstore_page_reclaims", "%llu", (unsigned long long)st.page_reclaims);
+     1049:  111:        APPEND_STAT("extstore_pages_free", "%llu", (unsigned long long)st.pages_free);
+     1049:  112:        APPEND_STAT("extstore_pages_used", "%llu", (unsigned long long)st.pages_used);
+     1049:  113:        APPEND_STAT("extstore_objects_evicted", "%llu", (unsigned long long)st.objects_evicted);
+     1049:  114:        APPEND_STAT("extstore_objects_read", "%llu", (unsigned long long)st.objects_read);
+     1049:  115:        APPEND_STAT("extstore_objects_written", "%llu", (unsigned long long)st.objects_written);
+     1049:  116:        APPEND_STAT("extstore_objects_used", "%llu", (unsigned long long)st.objects_used);
+     1049:  117:        APPEND_STAT("extstore_bytes_evicted", "%llu", (unsigned long long)st.bytes_evicted);
+     1049:  118:        APPEND_STAT("extstore_bytes_written", "%llu", (unsigned long long)st.bytes_written);
+     1049:  119:        APPEND_STAT("extstore_bytes_read", "%llu", (unsigned long long)st.bytes_read);
+     1049:  120:        APPEND_STAT("extstore_bytes_used", "%llu", (unsigned long long)st.bytes_used);
+     1049:  121:        APPEND_STAT("extstore_bytes_fragmented", "%llu", (unsigned long long)st.bytes_fragmented);
+     1049:  122:        APPEND_STAT("extstore_limit_maxbytes", "%llu", (unsigned long long)(st.page_count * st.page_size));
+     1049:  123:        APPEND_STAT("extstore_io_queue", "%llu", (unsigned long long)(st.io_queue));
+        -:  124:    }
+        -:  125:
+     3796:  126:}
+        -:  127:
+        -:  128:// This callback runs in the IO thread.
+        -:  129:// TODO: Some or all of this should move to the
+        -:  130:// io_pending's callback back in the worker thread.
+        -:  131:// It might make sense to keep the crc32c check here though.
+      388:  132:static void _storage_get_item_cb(void *e, obj_io *io, int ret) {
+        -:  133:    // FIXME: assumes success
+      388:  134:    io_pending_storage_t *p = (io_pending_storage_t *)io->data;
+      388:  135:    mc_resp *resp = p->resp;
+      388:  136:    conn *c = p->c;
+     388*:  137:    assert(p->active == true);
+      388:  138:    item *read_it = (item *)io->buf;
+      388:  139:    bool miss = false;
+        -:  140:
+        -:  141:    // TODO: How to do counters for hit/misses?
+      388:  142:    if (ret < 1) {
+        -:  143:        miss = true;
+        -:  144:    } else {
+      376:  145:        uint32_t crc2;
+      376:  146:        uint32_t crc = (uint32_t) read_it->exptime;
+      376:  147:        int x;
+        -:  148:        // item is chunked, crc the iov's
+      376:  149:        if (io->iov != NULL) {
+        -:  150:            // first iov is the header, which we don't use beyond crc
+      344:  151:            crc2 = crc32c(0, (char *)io->iov[0].iov_base+STORE_OFFSET, io->iov[0].iov_len-STORE_OFFSET);
+        -:  152:            // make sure it's not sent. hack :(
+      344:  153:            io->iov[0].iov_len = 0;
+     2697:  154:            for (x = 1; x < io->iovcnt; x++) {
+     2353:  155:                crc2 = crc32c(crc2, (char *)io->iov[x].iov_base, io->iov[x].iov_len);
+        -:  156:            }
+        -:  157:        } else {
+       32:  158:            crc2 = crc32c(0, (char *)read_it+STORE_OFFSET, io->len-STORE_OFFSET);
+        -:  159:        }
+        -:  160:
+      376:  161:        if (crc != crc2) {
+    #####:  162:            miss = true;
+    #####:  163:            p->badcrc = true;
+        -:  164:        }
+        -:  165:    }
+        -:  166:
+    #####:  167:    if (miss) {
+       12:  168:        if (p->noreply) {
+        -:  169:            // In all GET cases, noreply means we send nothing back.
+    #####:  170:            resp->skip = true;
+        -:  171:        } else {
+        -:  172:            // TODO: This should be movable to the worker thread.
+        -:  173:            // Convert the binprot response into a miss response.
+        -:  174:            // The header requires knowing a bunch of stateful crap, so rather
+        -:  175:            // than simply writing out a "new" miss response we mangle what's
+        -:  176:            // already there.
+       12:  177:            if (c->protocol == binary_prot) {
+        8:  178:                protocol_binary_response_header *header =
+        -:  179:                    (protocol_binary_response_header *)resp->wbuf;
+        -:  180:
+        -:  181:                // cut the extra nbytes off of the body_len
+        8:  182:                uint32_t body_len = ntohl(header->response.bodylen);
+        8:  183:                uint8_t hdr_len = header->response.extlen;
+        8:  184:                body_len -= resp->iov[p->iovec_data].iov_len + hdr_len;
+        8:  185:                resp->tosend -= resp->iov[p->iovec_data].iov_len + hdr_len;
+        8:  186:                header->response.extlen = 0;
+        8:  187:                header->response.status = (uint16_t)htons(PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
+        8:  188:                header->response.bodylen = htonl(body_len);
+        -:  189:
+        -:  190:                // truncate the data response.
+        8:  191:                resp->iov[p->iovec_data].iov_len = 0;
+        -:  192:                // wipe the extlen iov... wish it was just a flat buffer.
+        8:  193:                resp->iov[p->iovec_data-1].iov_len = 0;
+        8:  194:                resp->chunked_data_iov = 0;
+        -:  195:            } else {
+        4:  196:                int i;
+        -:  197:                // Meta commands have EN status lines for miss, rather than
+        -:  198:                // END as a trailer as per normal ascii.
+        4:  199:                if (resp->iov[0].iov_len >= 3
+        4:  200:                        && memcmp(resp->iov[0].iov_base, "VA ", 3) == 0) {
+        -:  201:                    // TODO: These miss translators should use specific callback
+        -:  202:                    // functions attached to the io wrap. This is weird :(
+        1:  203:                    resp->iovcnt = 1;
+        1:  204:                    resp->iov[0].iov_len = 4;
+        1:  205:                    resp->iov[0].iov_base = "EN\r\n";
+        1:  206:                    resp->tosend = 4;
+        -:  207:                } else {
+        -:  208:                    // Wipe the iovecs up through our data injection.
+        -:  209:                    // Allows trailers to be returned (END)
+        9:  210:                    for (i = 0; i <= p->iovec_data; i++) {
+        6:  211:                        resp->tosend -= resp->iov[i].iov_len;
+        6:  212:                        resp->iov[i].iov_len = 0;
+        6:  213:                        resp->iov[i].iov_base = NULL;
+        -:  214:                    }
+        -:  215:                }
+        4:  216:                resp->chunked_total = 0;
+        4:  217:                resp->chunked_data_iov = 0;
+        -:  218:            }
+        -:  219:        }
+       12:  220:        p->miss = true;
+        -:  221:    } else {
+     376*:  222:        assert(read_it->slabs_clsid != 0);
+        -:  223:        // TODO: should always use it instead of ITEM_data to kill more
+        -:  224:        // chunked special casing.
+      376:  225:        if ((read_it->it_flags & ITEM_CHUNKED) == 0) {
+       32:  226:            resp->iov[p->iovec_data].iov_base = ITEM_data(read_it);
+        -:  227:        }
+      376:  228:        p->miss = false;
+        -:  229:    }
+        -:  230:
+      388:  231:    p->active = false;
+        -:  232:    //assert(c->io_wrapleft >= 0);
+        -:  233:
+      388:  234:    return_io_pending((io_pending_t *)p);
+      388:  235:}
+        -:  236:
+      392:  237:int storage_get_item(conn *c, item *it, mc_resp *resp) {
+        -:  238:#ifdef NEED_ALIGN
+        -:  239:    item_hdr hdr;
+        -:  240:    memcpy(&hdr, ITEM_data(it), sizeof(hdr));
+        -:  241:#else
+      392:  242:    item_hdr *hdr = (item_hdr *)ITEM_data(it);
+        -:  243:#endif
+      392:  244:    io_queue_t *q = conn_io_queue_get(c, IO_QUEUE_EXTSTORE);
+      392:  245:    size_t ntotal = ITEM_ntotal(it);
+      392:  246:    unsigned int clsid = slabs_clsid(ntotal);
+      392:  247:    item *new_it;
+      392:  248:    bool chunked = false;
+      392:  249:    if (ntotal > settings.slab_chunk_size_max) {
+        -:  250:        // Pull a chunked item header.
+      351:  251:        client_flags_t flags;
+     351*:  252:        FLAGS_CONV(it, flags);
+      351:  253:        new_it = item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, it->nbytes);
+     351*:  254:        assert(new_it == NULL || (new_it->it_flags & ITEM_CHUNKED));
+        -:  255:        chunked = true;
+        -:  256:    } else {
+       41:  257:        new_it = do_item_alloc_pull(ntotal, clsid);
+        -:  258:    }
+      392:  259:    if (new_it == NULL)
+        -:  260:        return -1;
+        -:  261:    // so we can free the chunk on a miss
+      392:  262:    new_it->slabs_clsid = clsid;
+        -:  263:
+      392:  264:    io_pending_storage_t *p = do_cache_alloc(c->thread->io_cache);
+        -:  265:    // this is a re-cast structure, so assert that we never outsize it.
+      392:  266:    assert(sizeof(io_pending_t) >= sizeof(io_pending_storage_t));
+      392:  267:    memset(p, 0, sizeof(io_pending_storage_t));
+      392:  268:    p->active = true;
+      392:  269:    p->miss = false;
+      392:  270:    p->badcrc = false;
+      392:  271:    p->noreply = c->noreply;
+      392:  272:    p->thread = c->thread;
+      392:  273:    p->return_cb = storage_return_cb;
+      392:  274:    p->finalize_cb = storage_finalize_cb;
+        -:  275:    // io_pending owns the reference for this object now.
+      392:  276:    p->hdr_it = it;
+      392:  277:    p->resp = resp;
+      392:  278:    p->io_queue_type = IO_QUEUE_EXTSTORE;
+      392:  279:    obj_io *eio = &p->io_ctx;
+        -:  280:
+        -:  281:    // FIXME: error handling.
+      392:  282:    if (chunked) {
+      351:  283:        unsigned int ciovcnt = 0;
+      351:  284:        size_t remain = new_it->nbytes;
+      351:  285:        item_chunk *chunk = (item_chunk *) ITEM_schunk(new_it);
+        -:  286:        // TODO: This might make sense as a _global_ cache vs a per-thread.
+        -:  287:        // but we still can't load objects requiring > IOV_MAX iovs.
+        -:  288:        // In the meantime, these objects are rare/slow enough that
+        -:  289:        // malloc/freeing a statically sized object won't cause us much pain.
+      351:  290:        eio->iov = malloc(sizeof(struct iovec) * IOV_MAX);
+      351:  291:        if (eio->iov == NULL) {
+    #####:  292:            item_remove(new_it);
+    #####:  293:            do_cache_free(c->thread->io_cache, p);
+    #####:  294:            return -1;
+        -:  295:        }
+        -:  296:
+        -:  297:        // fill the header so we can get the full data + crc back.
+      351:  298:        eio->iov[0].iov_base = new_it;
+      351:  299:        eio->iov[0].iov_len = ITEM_ntotal(new_it) - new_it->nbytes;
+      351:  300:        ciovcnt++;
+        -:  301:
+     2735:  302:        while (remain > 0) {
+     2385:  303:            chunk = do_item_alloc_chunk(chunk, remain);
+        -:  304:            // FIXME: _pure evil_, silently erroring if item is too large.
+     2385:  305:            if (chunk == NULL || ciovcnt > IOV_MAX-1) {
+        1:  306:                item_remove(new_it);
+        1:  307:                free(eio->iov);
+        -:  308:                // TODO: wrapper function for freeing up an io wrap?
+        1:  309:                eio->iov = NULL;
+        1:  310:                do_cache_free(c->thread->io_cache, p);
+        1:  311:                return -1;
+        -:  312:            }
+     2384:  313:            eio->iov[ciovcnt].iov_base = chunk->data;
+     2384:  314:            eio->iov[ciovcnt].iov_len = (remain < chunk->size) ? remain : chunk->size;
+     2384:  315:            chunk->used = (remain < chunk->size) ? remain : chunk->size;
+     2384:  316:            remain -= chunk->size;
+     2384:  317:            ciovcnt++;
+        -:  318:        }
+        -:  319:
+      350:  320:        eio->iovcnt = ciovcnt;
+        -:  321:    }
+        -:  322:
+        -:  323:    // Chunked or non chunked we reserve a response iov here.
+      391:  324:    p->iovec_data = resp->iovcnt;
+      391:  325:    int iovtotal = (c->protocol == binary_prot) ? it->nbytes - 2 : it->nbytes;
+      391:  326:    if (chunked) {
+      350:  327:        resp_add_chunked_iov(resp, new_it, iovtotal);
+        -:  328:    } else {
+       41:  329:        resp_add_iov(resp, "", iovtotal);
+        -:  330:    }
+        -:  331:
+        -:  332:    // We can't bail out anymore, so mc_resp owns the IO from here.
+      391:  333:    resp->io_pending = (io_pending_t *)p;
+        -:  334:
+      391:  335:    eio->buf = (void *)new_it;
+      391:  336:    p->c = c;
+        -:  337:
+        -:  338:    // We need to stack the sub-struct IO's together for submission.
+      391:  339:    eio->next = q->stack_ctx;
+      391:  340:    q->stack_ctx = eio;
+        -:  341:
+        -:  342:    // No need to stack the io_pending's together as they live on mc_resp's.
+     391*:  343:    assert(q->count >= 0);
+      391:  344:    q->count++;
+        -:  345:    // reference ourselves for the callback.
+      391:  346:    eio->data = (void *)p;
+        -:  347:
+        -:  348:    // Now, fill in io->io based on what was in our header.
+        -:  349:#ifdef NEED_ALIGN
+        -:  350:    eio->page_version = hdr.page_version;
+        -:  351:    eio->page_id = hdr.page_id;
+        -:  352:    eio->offset = hdr.offset;
+        -:  353:#else
+      391:  354:    eio->page_version = hdr->page_version;
+      391:  355:    eio->page_id = hdr->page_id;
+      391:  356:    eio->offset = hdr->offset;
+        -:  357:#endif
+      391:  358:    eio->len = ntotal;
+      391:  359:    eio->mode = OBJ_IO_READ;
+      391:  360:    eio->cb = _storage_get_item_cb;
+        -:  361:
+        -:  362:    // FIXME: This stat needs to move to reflect # of flash hits vs misses
+        -:  363:    // for now it's a good gauge on how often we request out to flash at
+        -:  364:    // least.
+      391:  365:    pthread_mutex_lock(&c->thread->stats.mutex);
+      391:  366:    c->thread->stats.get_extstore++;
+      391:  367:    pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  368:
+      391:  369:    return 0;
+        -:  370:}
+        -:  371:
+      386:  372:void storage_submit_cb(io_queue_t *q) {
+        -:  373:    // Don't need to do anything special for extstore.
+      386:  374:    extstore_submit(q->ctx, q->stack_ctx);
+        -:  375:
+        -:  376:    // need to reset the stack for next use.
+      386:  377:    q->stack_ctx = NULL;
+      386:  378:}
+        -:  379:
+        -:  380:// Runs locally in worker thread.
+      391:  381:static void recache_or_free(io_pending_t *pending) {
+        -:  382:    // re-cast to our specific struct.
+      391:  383:    io_pending_storage_t *p = (io_pending_storage_t *)pending;
+        -:  384:
+      391:  385:    conn *c = p->c;
+      391:  386:    obj_io *io = &p->io_ctx;
+      391:  387:    assert(io != NULL);
+      391:  388:    item *it = (item *)io->buf;
+     391*:  389:    assert(c != NULL);
+      391:  390:    bool do_free = true;
+      391:  391:    if (p->active) {
+        -:  392:        // If request never dispatched, free the read buffer but leave the
+        -:  393:        // item header alone.
+        3:  394:        do_free = false;
+        3:  395:        size_t ntotal = ITEM_ntotal(p->hdr_it);
+        3:  396:        slabs_free(it, ntotal, slabs_clsid(ntotal));
+        -:  397:
+        3:  398:        io_queue_t *q = conn_io_queue_get(c, p->io_queue_type);
+        3:  399:        q->count--;
+       3*:  400:        assert(q->count >= 0);
+        3:  401:        pthread_mutex_lock(&c->thread->stats.mutex);
+        3:  402:        c->thread->stats.get_aborted_extstore++;
+        3:  403:        pthread_mutex_unlock(&c->thread->stats.mutex);
+      388:  404:    } else if (p->miss) {
+        -:  405:        // If request was ultimately a miss, unlink the header.
+       12:  406:        do_free = false;
+       12:  407:        size_t ntotal = ITEM_ntotal(p->hdr_it);
+       12:  408:        item_unlink(p->hdr_it);
+       12:  409:        slabs_free(it, ntotal, slabs_clsid(ntotal));
+       12:  410:        pthread_mutex_lock(&c->thread->stats.mutex);
+       12:  411:        c->thread->stats.miss_from_extstore++;
+       12:  412:        if (p->badcrc)
+    #####:  413:            c->thread->stats.badcrc_from_extstore++;
+       12:  414:        pthread_mutex_unlock(&c->thread->stats.mutex);
+      376:  415:    } else if (settings.ext_recache_rate) {
+        -:  416:        // hashvalue is cuddled during store
+       84:  417:        uint32_t hv = (uint32_t)it->time;
+        -:  418:        // opt to throw away rather than wait on a lock.
+       84:  419:        void *hold_lock = item_trylock(hv);
+       84:  420:        if (hold_lock != NULL) {
+       84:  421:            item *h_it = p->hdr_it;
+       84:  422:            uint8_t flags = ITEM_LINKED|ITEM_FETCHED|ITEM_ACTIVE;
+        -:  423:            // Item must be recently hit at least twice to recache.
+       84:  424:            if (((h_it->it_flags & flags) == flags) &&
+       52:  425:                    h_it->time > current_time - ITEM_UPDATE_INTERVAL &&
+       52:  426:                    c->recache_counter++ % settings.ext_recache_rate == 0) {
+       52:  427:                do_free = false;
+        -:  428:                // In case it's been updated.
+       52:  429:                it->exptime = h_it->exptime;
+       52:  430:                it->it_flags &= ~ITEM_LINKED;
+       52:  431:                it->refcount = 0;
+       52:  432:                it->h_next = NULL; // might not be necessary.
+       52:  433:                STORAGE_delete(c->thread->storage, h_it);
+       52:  434:                item_replace(h_it, it, hv);
+       52:  435:                ITEM_set_cas(it, ITEM_get_cas(h_it));
+       52:  436:                pthread_mutex_lock(&c->thread->stats.mutex);
+       52:  437:                c->thread->stats.recache_from_extstore++;
+       52:  438:                pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  439:            }
+        -:  440:        }
+       84:  441:        if (hold_lock)
+       84:  442:            item_trylock_unlock(hold_lock);
+        -:  443:    }
+       99:  444:    if (do_free)
+      324:  445:        slabs_free(it, ITEM_ntotal(it), ITEM_clsid(it));
+        -:  446:
+      391:  447:    p->io_ctx.buf = NULL;
+      391:  448:    p->io_ctx.next = NULL;
+      391:  449:    p->active = false;
+        -:  450:
+        -:  451:    // TODO: reuse lock and/or hv.
+      391:  452:    item_remove(p->hdr_it);
+      391:  453:}
+        -:  454:
+        -:  455:// Called after an IO has been returned to the worker thread.
+      388:  456:static void storage_return_cb(io_pending_t *pending) {
+      388:  457:    io_queue_t *q = conn_io_queue_get(pending->c, pending->io_queue_type);
+      388:  458:    q->count--;
+      388:  459:    if (q->count == 0) {
+      386:  460:        conn_worker_readd(pending->c);
+        -:  461:    }
+      388:  462:}
+        -:  463:
+        -:  464:// Called after responses have been transmitted. Need to free up related data.
+      391:  465:static void storage_finalize_cb(io_pending_t *pending) {
+      391:  466:    recache_or_free(pending);
+      391:  467:    io_pending_storage_t *p = (io_pending_storage_t *)pending;
+      391:  468:    obj_io *io = &p->io_ctx;
+        -:  469:    // malloc'ed iovec list used for chunked extstore fetches.
+      391:  470:    if (io->iov) {
+      350:  471:        free(io->iov);
+      350:  472:        io->iov = NULL;
+        -:  473:    }
+        -:  474:    // don't need to free the main context, since it's embedded.
+      391:  475:}
+        -:  476:
+        -:  477:/*
+        -:  478: * WRITE FLUSH THREAD
+        -:  479: */
+        -:  480:
+  5403631:  481:static int storage_write(void *storage, const int clsid, const int item_age) {
+  5403631:  482:    int did_moves = 0;
+  5403631:  483:    struct lru_pull_tail_return it_info;
+        -:  484:
+  5403631:  485:    it_info.it = NULL;
+  5403631:  486:    lru_pull_tail(clsid, COLD_LRU, 0, LRU_PULL_RETURN_ITEM, 0, &it_info);
+        -:  487:    /* Item is locked, and we have a reference to it. */
+  5403631:  488:    if (it_info.it == NULL) {
+        -:  489:        return did_moves;
+        -:  490:    }
+        -:  491:
+    61809:  492:    obj_io io;
+    61809:  493:    item *it = it_info.it;
+        -:  494:    /* First, storage for the header object */
+    61809:  495:    size_t orig_ntotal = ITEM_ntotal(it);
+    61809:  496:    client_flags_t flags;
+    61809:  497:    if ((it->it_flags & ITEM_HDR) == 0 &&
+    60306:  498:            (item_age == 0 || current_time - it->time > item_age)) {
+    25046:  499:        FLAGS_CONV(it, flags);
+    25046:  500:        item *hdr_it = do_item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, sizeof(item_hdr));
+        -:  501:        /* Run the storage write understanding the start of the item is dirty.
+        -:  502:         * We will fill it (time/exptime/etc) from the header item on read.
+        -:  503:         */
+    25046:  504:        if (hdr_it != NULL) {
+    25046:  505:            int bucket = (it->it_flags & ITEM_CHUNKED) ?
+    25046:  506:                PAGE_BUCKET_CHUNKED : PAGE_BUCKET_DEFAULT;
+        -:  507:            // Compress soon to expire items into similar pages.
+    25046:  508:            if (it->exptime - current_time < settings.ext_low_ttl) {
+     1304:  509:                bucket = PAGE_BUCKET_LOWTTL;
+        -:  510:            }
+    25046:  511:            hdr_it->it_flags |= ITEM_HDR;
+    25046:  512:            io.len = orig_ntotal;
+    25046:  513:            io.mode = OBJ_IO_WRITE;
+        -:  514:            // NOTE: when the item is read back in, the slab mover
+        -:  515:            // may see it. Important to have refcount>=2 or ~ITEM_LINKED
+   25046*:  516:            assert(it->refcount >= 2);
+        -:  517:            // NOTE: write bucket vs free page bucket will disambiguate once
+        -:  518:            // lowttl feature is better understood.
+    25046:  519:            if (extstore_write_request(storage, bucket, bucket, &io) == 0) {
+        -:  520:                // cuddle the hash value into the time field so we don't have
+        -:  521:                // to recalculate it.
+    22567:  522:                item *buf_it = (item *) io.buf;
+    22567:  523:                buf_it->time = it_info.hv;
+        -:  524:                // copy from past the headers + time headers.
+        -:  525:                // TODO: should be in items.c
+    22567:  526:                if (it->it_flags & ITEM_CHUNKED) {
+        -:  527:                    // Need to loop through the item and copy
+     1304:  528:                    item_chunk *sch = (item_chunk *) ITEM_schunk(it);
+     1304:  529:                    int remain = orig_ntotal;
+     1304:  530:                    int copied = 0;
+        -:  531:                    // copy original header
+     1304:  532:                    int hdrtotal = ITEM_ntotal(it) - it->nbytes;
+     1304:  533:                    memcpy((char *)io.buf+STORE_OFFSET, (char *)it+STORE_OFFSET, hdrtotal - STORE_OFFSET);
+     1304:  534:                    copied = hdrtotal;
+        -:  535:                    // copy data in like it were one large object.
+     7969:  536:                    while (sch && remain) {
+    6665*:  537:                        assert(remain >= sch->used);
+     6665:  538:                        memcpy((char *)io.buf+copied, sch->data, sch->used);
+        -:  539:                        // FIXME: use one variable?
+     6665:  540:                        remain -= sch->used;
+     6665:  541:                        copied += sch->used;
+     6665:  542:                        sch = sch->next;
+        -:  543:                    }
+        -:  544:                } else {
+    21263:  545:                    memcpy((char *)io.buf+STORE_OFFSET, (char *)it+STORE_OFFSET, io.len-STORE_OFFSET);
+        -:  546:                }
+        -:  547:                // crc what we copied so we can do it sequentially.
+    22567:  548:                buf_it->it_flags &= ~ITEM_LINKED;
+    22567:  549:                buf_it->exptime = crc32c(0, (char*)io.buf+STORE_OFFSET, orig_ntotal-STORE_OFFSET);
+    22567:  550:                extstore_write(storage, &io);
+    22567:  551:                item_hdr *hdr = (item_hdr *) ITEM_data(hdr_it);
+    22567:  552:                hdr->page_version = io.page_version;
+    22567:  553:                hdr->page_id = io.page_id;
+    22567:  554:                hdr->offset  = io.offset;
+        -:  555:                // overload nbytes for the header it
+    22567:  556:                hdr_it->nbytes = it->nbytes;
+        -:  557:                /* success! Now we need to fill relevant data into the new
+        -:  558:                 * header and replace. Most of this requires the item lock
+        -:  559:                 */
+        -:  560:                /* CAS gets set while linking. Copy post-replace */
+    22567:  561:                item_replace(it, hdr_it, it_info.hv);
+    22567:  562:                ITEM_set_cas(hdr_it, ITEM_get_cas(it));
+    22567:  563:                do_item_remove(hdr_it);
+    22567:  564:                did_moves = 1;
+   22567*:  565:                LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EXTSTORE_WRITE, it, bucket);
+        -:  566:            } else {
+        -:  567:                /* Failed to write for some reason, can't continue. */
+     2479:  568:                slabs_free(hdr_it, ITEM_ntotal(hdr_it), ITEM_clsid(hdr_it));
+        -:  569:            }
+        -:  570:        }
+        -:  571:    }
+    61809:  572:    do_item_remove(it);
+    61809:  573:    item_unlock(it_info.hv);
+    61809:  574:    return did_moves;
+        -:  575:}
+        -:  576:
+        -:  577:static pthread_t storage_write_tid;
+        -:  578:static pthread_mutex_t storage_write_plock;
+        -:  579:#define WRITE_SLEEP_MIN 200
+        -:  580:
+       10:  581:static void *storage_write_thread(void *arg) {
+       10:  582:    void *storage = arg;
+        -:  583:    // NOTE: ignoring overflow since that would take years of uptime in a
+        -:  584:    // specific load pattern of never going to sleep.
+       10:  585:    unsigned int backoff[MAX_NUMBER_OF_SLAB_CLASSES] = {0};
+       10:  586:    unsigned int counter = 0;
+       10:  587:    useconds_t to_sleep = WRITE_SLEEP_MIN;
+       10:  588:    logger *l = logger_create();
+       10:  589:    if (l == NULL) {
+    #####:  590:        fprintf(stderr, "Failed to allocate logger for storage compaction thread\n");
+    #####:  591:        abort();
+        -:  592:    }
+        -:  593:
+       10:  594:    pthread_mutex_lock(&storage_write_plock);
+        -:  595:
+   294388:  596:    while (1) {
+        -:  597:        // cache per-loop to avoid calls to the slabs_clsid() search loop
+    98136:  598:        int min_class = slabs_clsid(settings.ext_item_size);
+    98136:  599:        unsigned int global_pages = global_page_pool_size(NULL);
+    98136:  600:        bool do_sleep = true;
+    98136:  601:        int target_pages = 0;
+    98136:  602:        if (global_pages < settings.ext_global_pool_min) {
+    #####:  603:            target_pages = settings.ext_global_pool_min - global_pages;
+        -:  604:        }
+    98136:  605:        counter++;
+    98136:  606:        if (to_sleep > settings.ext_max_sleep)
+        -:  607:            to_sleep = settings.ext_max_sleep;
+        -:  608:
+  6378840:  609:        for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6280704:  610:            bool did_move = false;
+  6280704:  611:            bool mem_limit_reached = false;
+  6280704:  612:            unsigned int chunks_free;
+  6280704:  613:            int item_age;
+        -:  614:
+  6280704:  615:            if (min_class > x || (backoff[x] && (counter % backoff[x] != 0))) {
+   899640:  616:                continue;
+        -:  617:            }
+        -:  618:
+        -:  619:            // Avoid extra slab lock calls during heavy writing.
+  5381064:  620:            unsigned int chunks_perpage = 0;
+  5381064:  621:            chunks_free = slabs_available_chunks(x, &mem_limit_reached,
+        -:  622:                    &chunks_perpage);
+  5381064:  623:            unsigned int target = chunks_perpage * target_pages;
+        -:  624:
+        -:  625:            // storage_write() will fail and cut loop after filling write buffer.
+  5403631:  626:            while (1) {
+        -:  627:                // if we are low on chunks and no spare, push out early.
+  5403631:  628:                if (chunks_free < target) {
+        -:  629:                    item_age = 0;
+        -:  630:                } else {
+  5403631:  631:                    item_age = settings.ext_item_age;
+        -:  632:                }
+  5403631:  633:                if (storage_write(storage, x, item_age)) {
+    22567:  634:                    chunks_free++; // Allow stopping if we've done enough this loop
+    22567:  635:                    did_move = true;
+    22567:  636:                    do_sleep = false;
+    22567:  637:                    if (to_sleep > WRITE_SLEEP_MIN)
+      229:  638:                        to_sleep /= 2;
+        -:  639:                } else {
+        -:  640:                    break;
+        -:  641:                }
+        -:  642:            }
+        -:  643:
+  5381064:  644:            if (!did_move) {
+  5380440:  645:                backoff[x]++;
+        -:  646:            } else {
+      624:  647:                backoff[x] = 1;
+        -:  648:            }
+        -:  649:        }
+        -:  650:
+        -:  651:        // flip lock so we can be paused or stopped
+    98136:  652:        pthread_mutex_unlock(&storage_write_plock);
+    98136:  653:        if (do_sleep) {
+        -:  654:            // Only do backoffs on other slab classes if we're actively
+        -:  655:            // flushing at least one class.
+  6338280:  656:            for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6240768:  657:                backoff[x] = 1;
+        -:  658:            }
+    97512:  659:            usleep(to_sleep);
+    97502:  660:            to_sleep++;
+        -:  661:        }
+    98126:  662:        pthread_mutex_lock(&storage_write_plock);
+        -:  663:    }
+        -:  664:    return NULL;
+        -:  665:}
+        -:  666:
+        -:  667:// TODO
+        -:  668:// logger needs logger_destroy() to exist/work before this is safe.
+        -:  669:/*int stop_storage_write_thread(void) {
+        -:  670:    int ret;
+        -:  671:    pthread_mutex_lock(&lru_maintainer_lock);
+        -:  672:    do_run_lru_maintainer_thread = 0;
+        -:  673:    pthread_mutex_unlock(&lru_maintainer_lock);
+        -:  674:    // WAKEUP SIGNAL
+        -:  675:    if ((ret = pthread_join(lru_maintainer_tid, NULL)) != 0) {
+        -:  676:        fprintf(stderr, "Failed to stop LRU maintainer thread: %s\n", strerror(ret));
+        -:  677:        return -1;
+        -:  678:    }
+        -:  679:    settings.lru_maintainer_thread = false;
+        -:  680:    return 0;
+        -:  681:}*/
+        -:  682:
+        1:  683:void storage_write_pause(void) {
+        1:  684:    pthread_mutex_lock(&storage_write_plock);
+        1:  685:}
+        -:  686:
+        1:  687:void storage_write_resume(void) {
+        1:  688:    pthread_mutex_unlock(&storage_write_plock);
+        1:  689:}
+        -:  690:
+       10:  691:int start_storage_write_thread(void *arg) {
+       10:  692:    int ret;
+        -:  693:
+       10:  694:    pthread_mutex_init(&storage_write_plock, NULL);
+       10:  695:    if ((ret = pthread_create(&storage_write_tid, NULL,
+        -:  696:        storage_write_thread, arg)) != 0) {
+    #####:  697:        fprintf(stderr, "Can't create storage_write thread: %s\n",
+        -:  698:            strerror(ret));
+    #####:  699:        return -1;
+        -:  700:    }
+       10:  701:    thread_setname(storage_write_tid, "mc-ext-write");
+        -:  702:
+       10:  703:    return 0;
+        -:  704:}
+        -:  705:
+        -:  706:/*** COMPACTOR ***/
+        -:  707:
+        -:  708:/* Fetch stats from the external storage system and decide to compact.
+        -:  709: * If we're more than half full, start skewing how aggressively to run
+        -:  710: * compaction, up to a desired target when all pages are full.
+        -:  711: */
+     1896:  712:static int storage_compact_check(void *storage, logger *l,
+        -:  713:        uint32_t *page_id, uint64_t *page_version,
+        -:  714:        uint64_t *page_size, bool *drop_unread) {
+     1896:  715:    struct extstore_stats st;
+     1896:  716:    int x;
+     1896:  717:    double rate;
+     1896:  718:    uint64_t frag_limit;
+     1896:  719:    uint64_t low_version = ULLONG_MAX;
+     1896:  720:    uint64_t lowest_version = ULLONG_MAX;
+     1896:  721:    unsigned int low_page = 0;
+     1896:  722:    unsigned int lowest_page = 0;
+     1896:  723:    extstore_get_stats(storage, &st);
+     1896:  724:    if (st.pages_used == 0)
+        -:  725:        return 0;
+        -:  726:
+        -:  727:    // lets pick a target "wasted" value and slew.
+     1896:  728:    if (st.pages_free > settings.ext_compact_under)
+        -:  729:        return 0;
+      638:  730:    *drop_unread = false;
+        -:  731:
+        -:  732:    // the number of free pages reduces the configured frag limit
+        -:  733:    // this allows us to defrag early if pages are very empty.
+      638:  734:    rate = 1.0 - ((double)st.pages_free / st.page_count);
+      638:  735:    rate *= settings.ext_max_frag;
+      638:  736:    frag_limit = st.page_size * rate;
+     638*:  737:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_FRAGINFO,
+        -:  738:            NULL, rate, frag_limit);
+      638:  739:    st.page_data = calloc(st.page_count, sizeof(struct extstore_page_data));
+      638:  740:    extstore_get_page_data(storage, &st);
+        -:  741:
+        -:  742:    // find oldest page by version that violates the constraint
+     6481:  743:    for (x = 0; x < st.page_count; x++) {
+     5205:  744:        if (st.page_data[x].version == 0 ||
+     1103:  745:            st.page_data[x].bucket == PAGE_BUCKET_LOWTTL)
+     4114:  746:            continue;
+     1091:  747:        if (st.page_data[x].version < lowest_version) {
+      702:  748:            lowest_page = x;
+      702:  749:            lowest_version = st.page_data[x].version;
+        -:  750:        }
+     1091:  751:        if (st.page_data[x].bytes_used < frag_limit) {
+      105:  752:            if (st.page_data[x].version < low_version) {
+       17:  753:                low_page = x;
+       17:  754:                low_version = st.page_data[x].version;
+        -:  755:            }
+        -:  756:        }
+        -:  757:    }
+      638:  758:    *page_size = st.page_size;
+      638:  759:    free(st.page_data);
+        -:  760:
+        -:  761:    // we have a page + version to attempt to reclaim.
+      638:  762:    if (low_version != ULLONG_MAX) {
+       14:  763:        *page_id = low_page;
+       14:  764:        *page_version = low_version;
+       14:  765:        return 1;
+      624:  766:    } else if (lowest_version != ULLONG_MAX && settings.ext_drop_unread
+      417:  767:            && st.pages_free <= settings.ext_drop_under) {
+        -:  768:        // nothing matched the frag rate barrier, so pick the absolute oldest
+        -:  769:        // version if we're configured to drop items.
+        5:  770:        *page_id = lowest_page;
+        5:  771:        *page_version = lowest_version;
+        5:  772:        *drop_unread = true;
+        5:  773:        return 1;
+        -:  774:    }
+        -:  775:
+        -:  776:    return 0;
+        -:  777:}
+        -:  778:
+        -:  779:static pthread_t storage_compact_tid;
+        -:  780:static pthread_mutex_t storage_compact_plock;
+        -:  781:#define MIN_STORAGE_COMPACT_SLEEP 10000
+        -:  782:
+        -:  783:struct storage_compact_wrap {
+        -:  784:    obj_io io;
+        -:  785:    pthread_mutex_t lock; // gates the bools.
+        -:  786:    bool done;
+        -:  787:    bool submitted;
+        -:  788:    bool miss; // version flipped out from under us
+        -:  789:};
+        -:  790:
+       64:  791:static void storage_compact_readback(void *storage, logger *l,
+        -:  792:        bool drop_unread, char *readback_buf,
+        -:  793:        uint32_t page_id, uint64_t page_version, uint32_t page_offset, uint64_t read_size) {
+       64:  794:    uint64_t offset = 0;
+       64:  795:    unsigned int rescues = 0;
+       64:  796:    unsigned int lost = 0;
+       64:  797:    unsigned int skipped = 0;
+        -:  798:
+     5853:  799:    while (offset < read_size) {
+     5853:  800:        item *hdr_it = NULL;
+     5853:  801:        item_hdr *hdr = NULL;
+     5853:  802:        item *it = (item *)(readback_buf+offset);
+     5853:  803:        unsigned int ntotal;
+        -:  804:        // probably zeroed out junk at the end of the wbuf
+     5853:  805:        if (it->nkey == 0) {
+        -:  806:            break;
+        -:  807:        }
+        -:  808:
+     5789:  809:        ntotal = ITEM_ntotal(it);
+     5789:  810:        uint32_t hv = (uint32_t)it->time;
+     5789:  811:        item_lock(hv);
+        -:  812:        // We don't have a conn and don't need to do most of do_item_get
+     5789:  813:        hdr_it = assoc_find(ITEM_key(it), it->nkey, hv);
+     5789:  814:        if (hdr_it != NULL) {
+     3285:  815:            bool do_write = false;
+     3285:  816:            refcount_incr(hdr_it);
+        -:  817:
+        -:  818:            // Check validity but don't bother removing it.
+     3285:  819:            if ((hdr_it->it_flags & ITEM_HDR) && !item_is_flushed(hdr_it) &&
+    3285*:  820:                   (hdr_it->exptime == 0 || hdr_it->exptime > current_time)) {
+     3285:  821:                hdr = (item_hdr *)ITEM_data(hdr_it);
+     3285:  822:                if (hdr->page_id == page_id && hdr->page_version == page_version
+     3285:  823:                        && hdr->offset == (int)offset + page_offset) {
+        -:  824:                    // Item header is still completely valid.
+     3186:  825:                    extstore_delete(storage, page_id, page_version, 1, ntotal);
+        -:  826:                    // drop inactive items.
+     3186:  827:                    if (drop_unread && GET_LRU(hdr_it->slabs_clsid) == COLD_LRU) {
+     1271:  828:                        do_write = false;
+     1271:  829:                        skipped++;
+        -:  830:                    } else {
+        -:  831:                        do_write = true;
+        -:  832:                    }
+        -:  833:                }
+        -:  834:            }
+        -:  835:
+     3285:  836:            if (do_write) {
+     1915:  837:                bool do_update = false;
+     1915:  838:                int tries;
+     1915:  839:                obj_io io;
+     1915:  840:                io.len = ntotal;
+     1915:  841:                io.mode = OBJ_IO_WRITE;
+     1967:  842:                for (tries = 10; tries > 0; tries--) {
+     1967:  843:                    if (extstore_write_request(storage, PAGE_BUCKET_COMPACT, PAGE_BUCKET_COMPACT, &io) == 0) {
+     1915:  844:                        memcpy(io.buf, it, io.len);
+     1915:  845:                        extstore_write(storage, &io);
+     1915:  846:                        do_update = true;
+     1915:  847:                        break;
+        -:  848:                    } else {
+       52:  849:                        usleep(1000);
+        -:  850:                    }
+        -:  851:                }
+        -:  852:
+    1915*:  853:                if (do_update) {
+     1915:  854:                    if (it->refcount == 2) {
+     1915:  855:                        hdr->page_version = io.page_version;
+     1915:  856:                        hdr->page_id = io.page_id;
+     1915:  857:                        hdr->offset = io.offset;
+     1915:  858:                        rescues++;
+        -:  859:                    } else {
+        -:  860:                        // re-alloc and replace header.
+    #####:  861:                        client_flags_t flags;
+    #####:  862:                        FLAGS_CONV(hdr_it, flags);
+    #####:  863:                        item *new_it = do_item_alloc(ITEM_key(hdr_it), hdr_it->nkey, flags, hdr_it->exptime, sizeof(item_hdr));
+    #####:  864:                        if (new_it) {
+        -:  865:                            // need to preserve the original item flags, but we
+        -:  866:                            // start unlinked, with linked being added during
+        -:  867:                            // item_replace below.
+    #####:  868:                            new_it->it_flags = hdr_it->it_flags & (~ITEM_LINKED);
+    #####:  869:                            new_it->time = hdr_it->time;
+    #####:  870:                            new_it->nbytes = hdr_it->nbytes;
+        -:  871:
+        -:  872:                            // copy the hdr data.
+    #####:  873:                            item_hdr *new_hdr = (item_hdr *) ITEM_data(new_it);
+    #####:  874:                            new_hdr->page_version = io.page_version;
+    #####:  875:                            new_hdr->page_id = io.page_id;
+    #####:  876:                            new_hdr->offset = io.offset;
+        -:  877:
+        -:  878:                            // replace the item in the hash table.
+    #####:  879:                            item_replace(hdr_it, new_it, hv);
+    #####:  880:                            ITEM_set_cas(new_it, (settings.use_cas) ? ITEM_get_cas(hdr_it) : 0);
+    #####:  881:                            do_item_remove(new_it); // release our reference.
+    #####:  882:                            rescues++;
+        -:  883:                        } else {
+    #####:  884:                            lost++;
+        -:  885:                        }
+        -:  886:                    }
+        -:  887:                } else {
+    #####:  888:                    lost++;
+        -:  889:                }
+        -:  890:            }
+        -:  891:
+     3285:  892:            do_item_remove(hdr_it);
+        -:  893:        }
+        -:  894:
+     5789:  895:        item_unlock(hv);
+     5789:  896:        offset += ntotal;
+     5789:  897:        if (read_size - offset < sizeof(struct _stritem))
+        -:  898:            break;
+        -:  899:    }
+        -:  900:
+       64:  901:    STATS_LOCK();
+       64:  902:    stats.extstore_compact_lost += lost;
+       64:  903:    stats.extstore_compact_rescues += rescues;
+       64:  904:    stats.extstore_compact_skipped += skipped;
+       64:  905:    STATS_UNLOCK();
+      64*:  906:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_END,
+        -:  907:            NULL, page_id, offset, rescues, lost, skipped);
+       64:  908:}
+        -:  909:
+       68:  910:static void _storage_compact_cb(void *e, obj_io *io, int ret) {
+       68:  911:    struct storage_compact_wrap *wrap = (struct storage_compact_wrap *)io->data;
+      68*:  912:    assert(wrap->submitted == true);
+        -:  913:
+       68:  914:    pthread_mutex_lock(&wrap->lock);
+        -:  915:
+       68:  916:    if (ret < 1) {
+        4:  917:        wrap->miss = true;
+        -:  918:    }
+       68:  919:    wrap->done = true;
+        -:  920:
+       68:  921:    pthread_mutex_unlock(&wrap->lock);
+       68:  922:}
+        -:  923:
+        -:  924:// TODO: hoist the storage bits from lru_maintainer_thread in here.
+        -:  925:// would be nice if they could avoid hammering the same locks though?
+        -:  926:// I guess it's only COLD. that's probably fine.
+       10:  927:static void *storage_compact_thread(void *arg) {
+       10:  928:    void *storage = arg;
+       10:  929:    useconds_t to_sleep = settings.ext_max_sleep;
+       10:  930:    bool compacting = false;
+       10:  931:    uint64_t page_version = 0;
+       10:  932:    uint64_t page_size = 0;
+       10:  933:    uint32_t page_offset = 0;
+       10:  934:    uint32_t page_id = 0;
+       10:  935:    bool drop_unread = false;
+       10:  936:    char *readback_buf = NULL;
+       10:  937:    struct storage_compact_wrap wrap;
+        -:  938:
+       10:  939:    logger *l = logger_create();
+       10:  940:    if (l == NULL) {
+    #####:  941:        fprintf(stderr, "Failed to allocate logger for storage compaction thread\n");
+    #####:  942:        abort();
+        -:  943:    }
+        -:  944:
+       10:  945:    readback_buf = malloc(settings.ext_wbuf_size);
+       10:  946:    if (readback_buf == NULL) {
+    #####:  947:        fprintf(stderr, "Failed to allocate readback buffer for storage compaction thread\n");
+    #####:  948:        abort();
+        -:  949:    }
+        -:  950:
+       10:  951:    pthread_mutex_init(&wrap.lock, NULL);
+       10:  952:    wrap.done = false;
+       10:  953:    wrap.submitted = false;
+       10:  954:    wrap.io.data = &wrap;
+       10:  955:    wrap.io.iov = NULL;
+       10:  956:    wrap.io.buf = (void *)readback_buf;
+        -:  957:
+       10:  958:    wrap.io.len = settings.ext_wbuf_size;
+       10:  959:    wrap.io.mode = OBJ_IO_READ;
+       10:  960:    wrap.io.cb = _storage_compact_cb;
+       10:  961:    pthread_mutex_lock(&storage_compact_plock);
+        -:  962:
+     2038:  963:    while (1) {
+     2038:  964:        pthread_mutex_unlock(&storage_compact_plock);
+     2038:  965:        if (to_sleep) {
+     2038:  966:            extstore_run_maint(storage);
+     2038:  967:            usleep(to_sleep);
+        -:  968:        }
+     2028:  969:        pthread_mutex_lock(&storage_compact_plock);
+        -:  970:
+     2028:  971:        if (!compacting && storage_compact_check(storage, l,
+        -:  972:                    &page_id, &page_version, &page_size, &drop_unread)) {
+       19:  973:            page_offset = 0;
+       19:  974:            compacting = true;
+      19*:  975:            LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_START,
+        -:  976:                    NULL, page_id, page_version);
+        -:  977:        }
+        -:  978:
+    2009*:  979:        if (compacting) {
+      151:  980:            pthread_mutex_lock(&wrap.lock);
+      151:  981:            if (page_offset < page_size && !wrap.done && !wrap.submitted) {
+       68:  982:                wrap.io.page_version = page_version;
+       68:  983:                wrap.io.page_id = page_id;
+       68:  984:                wrap.io.offset = page_offset;
+        -:  985:                // FIXME: should be smarter about io->next (unlink at use?)
+       68:  986:                wrap.io.next = NULL;
+       68:  987:                wrap.submitted = true;
+       68:  988:                wrap.miss = false;
+        -:  989:
+       68:  990:                extstore_submit(storage, &wrap.io);
+       83:  991:            } else if (wrap.miss) {
+       4*:  992:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_ABORT,
+        -:  993:                        NULL, page_id);
+        4:  994:                wrap.done = false;
+        4:  995:                wrap.submitted = false;
+        4:  996:                compacting = false;
+       79:  997:            } else if (wrap.submitted && wrap.done) {
+      64*:  998:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_READ_START,
+        -:  999:                        NULL, page_id, page_offset);
+       64: 1000:                storage_compact_readback(storage, l, drop_unread,
+        -: 1001:                        readback_buf, page_id, page_version, page_offset,
+       64: 1002:                        settings.ext_wbuf_size);
+       64: 1003:                page_offset += settings.ext_wbuf_size;
+       64: 1004:                wrap.done = false;
+       64: 1005:                wrap.submitted = false;
+       15: 1006:            } else if (page_offset >= page_size) {
+       15: 1007:                compacting = false;
+       15: 1008:                wrap.done = false;
+       15: 1009:                wrap.submitted = false;
+       15: 1010:                extstore_close_page(storage, page_id, page_version);
+      15*: 1011:                LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_END,
+        -: 1012:                        NULL, page_id);
+        -: 1013:            }
+      151: 1014:            pthread_mutex_unlock(&wrap.lock);
+        -: 1015:
+        -: 1016:            // finish actual compaction quickly.
+      151: 1017:            to_sleep = MIN_STORAGE_COMPACT_SLEEP;
+        -: 1018:        } else {
+     1877: 1019:            if (to_sleep < settings.ext_max_sleep)
+        5: 1020:                to_sleep += settings.ext_max_sleep;
+        -: 1021:        }
+        -: 1022:    }
+        -: 1023:    free(readback_buf);
+        -: 1024:
+        -: 1025:    return NULL;
+        -: 1026:}
+        -: 1027:
+        -: 1028:// TODO
+        -: 1029:// logger needs logger_destroy() to exist/work before this is safe.
+        -: 1030:/*int stop_storage_compact_thread(void) {
+        -: 1031:    int ret;
+        -: 1032:    pthread_mutex_lock(&lru_maintainer_lock);
+        -: 1033:    do_run_lru_maintainer_thread = 0;
+        -: 1034:    pthread_mutex_unlock(&lru_maintainer_lock);
+        -: 1035:    if ((ret = pthread_join(lru_maintainer_tid, NULL)) != 0) {
+        -: 1036:        fprintf(stderr, "Failed to stop LRU maintainer thread: %s\n", strerror(ret));
+        -: 1037:        return -1;
+        -: 1038:    }
+        -: 1039:    settings.lru_maintainer_thread = false;
+        -: 1040:    return 0;
+        -: 1041:}*/
+        -: 1042:
+        1: 1043:void storage_compact_pause(void) {
+        1: 1044:    pthread_mutex_lock(&storage_compact_plock);
+        1: 1045:}
+        -: 1046:
+        1: 1047:void storage_compact_resume(void) {
+        1: 1048:    pthread_mutex_unlock(&storage_compact_plock);
+        1: 1049:}
+        -: 1050:
+       10: 1051:int start_storage_compact_thread(void *arg) {
+       10: 1052:    int ret;
+        -: 1053:
+       10: 1054:    pthread_mutex_init(&storage_compact_plock, NULL);
+       10: 1055:    if ((ret = pthread_create(&storage_compact_tid, NULL,
+        -: 1056:        storage_compact_thread, arg)) != 0) {
+    #####: 1057:        fprintf(stderr, "Can't create storage_compact thread: %s\n",
+        -: 1058:            strerror(ret));
+    #####: 1059:        return -1;
+        -: 1060:    }
+       10: 1061:    thread_setname(storage_compact_tid, "mc-ext-compact");
+        -: 1062:
+       10: 1063:    return 0;
+        -: 1064:}
+        -: 1065:
+        -: 1066:/*** UTILITY ***/
+        -: 1067:// /path/to/file:100G:bucket1
+        -: 1068:// FIXME: Modifies argument. copy instead?
+       14: 1069:struct extstore_conf_file *storage_conf_parse(char *arg, unsigned int page_size) {
+       14: 1070:    struct extstore_conf_file *cf = NULL;
+       14: 1071:    char *b = NULL;
+       14: 1072:    char *p = strtok_r(arg, ":", &b);
+       14: 1073:    char unit = 0;
+       14: 1074:    uint64_t multiplier = 0;
+       14: 1075:    int base_size = 0;
+       14: 1076:    if (p == NULL)
+    #####: 1077:        goto error;
+        -: 1078:    // First arg is the filepath.
+       14: 1079:    cf = calloc(1, sizeof(struct extstore_conf_file));
+       14: 1080:    cf->file = strdup(p);
+        -: 1081:
+       14: 1082:    p = strtok_r(NULL, ":", &b);
+       14: 1083:    if (p == NULL) {
+    #####: 1084:        fprintf(stderr, "must supply size to ext_path, ie: ext_path=/f/e:64m (M|G|T|P supported)\n");
+    #####: 1085:        goto error;
+        -: 1086:    }
+       14: 1087:    unit = tolower(p[strlen(p)-1]);
+       14: 1088:    p[strlen(p)-1] = '\0';
+        -: 1089:    // sigh.
+       14: 1090:    switch (unit) {
+        -: 1091:        case 'm':
+        -: 1092:            multiplier = 1024 * 1024;
+        -: 1093:            break;
+    #####: 1094:        case 'g':
+    #####: 1095:            multiplier = 1024 * 1024 * 1024;
+    #####: 1096:            break;
+    #####: 1097:        case 't':
+    #####: 1098:            multiplier = 1024 * 1024;
+    #####: 1099:            multiplier *= 1024 * 1024;
+    #####: 1100:            break;
+    #####: 1101:        case 'p':
+    #####: 1102:            multiplier = 1024 * 1024;
+    #####: 1103:            multiplier *= 1024 * 1024 * 1024;
+    #####: 1104:            break;
+        1: 1105:        default:
+        1: 1106:            fprintf(stderr, "must supply size to ext_path, ie: ext_path=/f/e:64m (M|G|T|P supported)\n");
+        1: 1107:            goto error;
+        -: 1108:    }
+       13: 1109:    base_size = atoi(p);
+       13: 1110:    multiplier *= base_size;
+        -: 1111:    // page_count is nearest-but-not-larger-than pages * psize
+       13: 1112:    cf->page_count = multiplier / page_size;
+      13*: 1113:    assert(page_size * cf->page_count <= multiplier);
+       13: 1114:    if (cf->page_count == 0) {
+        1: 1115:        fprintf(stderr, "supplied ext_path has zero size, cannot use\n");
+        1: 1116:        goto error;
+        -: 1117:    }
+        -: 1118:
+        -: 1119:    // final token would be a default free bucket
+       12: 1120:    p = strtok_r(NULL, ",", &b);
+        -: 1121:    // TODO: We reuse the original DEFINES for now,
+        -: 1122:    // but if lowttl gets split up this needs to be its own set.
+       12: 1123:    if (p != NULL) {
+    #####: 1124:        if (strcmp(p, "compact") == 0) {
+    #####: 1125:            cf->free_bucket = PAGE_BUCKET_COMPACT;
+    #####: 1126:        } else if (strcmp(p, "lowttl") == 0) {
+    #####: 1127:            cf->free_bucket = PAGE_BUCKET_LOWTTL;
+    #####: 1128:        } else if (strcmp(p, "chunked") == 0) {
+    #####: 1129:            cf->free_bucket = PAGE_BUCKET_CHUNKED;
+    #####: 1130:        } else if (strcmp(p, "default") == 0) {
+    #####: 1131:            cf->free_bucket = PAGE_BUCKET_DEFAULT;
+        -: 1132:        } else {
+    #####: 1133:            fprintf(stderr, "Unknown extstore bucket: %s\n", p);
+    #####: 1134:            goto error;
+        -: 1135:        }
+        -: 1136:    } else {
+        -: 1137:        // TODO: is this necessary?
+       12: 1138:        cf->free_bucket = PAGE_BUCKET_DEFAULT;
+        -: 1139:    }
+        -: 1140:
+        -: 1141:    // TODO: disabling until compact algorithm is improved.
+       12: 1142:    if (cf->free_bucket != PAGE_BUCKET_DEFAULT) {
+    #####: 1143:        fprintf(stderr, "ext_path only presently supports the default bucket\n");
+    #####: 1144:        goto error;
+        -: 1145:    }
+        -: 1146:
+        -: 1147:    return cf;
+        2: 1148:error:
+    #####: 1149:    if (cf) {
+        2: 1150:        if (cf->file)
+        2: 1151:            free(cf->file);
+        2: 1152:        free(cf);
+        -: 1153:    }
+        -: 1154:    return NULL;
+        -: 1155:}
+        -: 1156:
+        -: 1157:struct storage_settings {
+        -: 1158:    struct extstore_conf_file *storage_file;
+        -: 1159:    struct extstore_conf ext_cf;
+        -: 1160:};
+        -: 1161:
+      427: 1162:void *storage_init_config(struct settings *s) {
+      427: 1163:    struct storage_settings *cf = calloc(1, sizeof(struct storage_settings));
+        -: 1164:
+      427: 1165:    s->ext_item_size = 512;
+      427: 1166:    s->ext_item_age = UINT_MAX;
+      427: 1167:    s->ext_low_ttl = 0;
+      427: 1168:    s->ext_recache_rate = 2000;
+      427: 1169:    s->ext_max_frag = 0.8;
+      427: 1170:    s->ext_drop_unread = false;
+      427: 1171:    s->ext_wbuf_size = 1024 * 1024 * 4;
+      427: 1172:    s->ext_compact_under = 0;
+      427: 1173:    s->ext_drop_under = 0;
+      427: 1174:    s->ext_max_sleep = 1000000;
+      427: 1175:    s->slab_automove_freeratio = 0.01;
+      427: 1176:    s->ext_page_size = 1024 * 1024 * 64;
+      427: 1177:    s->ext_io_threadcount = 1;
+      427: 1178:    cf->ext_cf.page_size = settings.ext_page_size;
+      427: 1179:    cf->ext_cf.wbuf_size = settings.ext_wbuf_size;
+      427: 1180:    cf->ext_cf.io_threadcount = settings.ext_io_threadcount;
+      427: 1181:    cf->ext_cf.io_depth = 1;
+      427: 1182:    cf->ext_cf.page_buckets = 4;
+      427: 1183:    cf->ext_cf.wbuf_count = cf->ext_cf.page_buckets;
+        -: 1184:
+      427: 1185:    return cf;
+        -: 1186:}
+        -: 1187:
+        -: 1188:// TODO: pass settings struct?
+       97: 1189:int storage_read_config(void *conf, char **subopt) {
+       97: 1190:    struct storage_settings *cf = conf;
+       97: 1191:    struct extstore_conf *ext_cf = &cf->ext_cf;
+       97: 1192:    char *subopts_value;
+        -: 1193:
+       97: 1194:    enum {
+        -: 1195:        EXT_PAGE_SIZE,
+        -: 1196:        EXT_WBUF_SIZE,
+        -: 1197:        EXT_THREADS,
+        -: 1198:        EXT_IO_DEPTH,
+        -: 1199:        EXT_PATH,
+        -: 1200:        EXT_ITEM_SIZE,
+        -: 1201:        EXT_ITEM_AGE,
+        -: 1202:        EXT_LOW_TTL,
+        -: 1203:        EXT_RECACHE_RATE,
+        -: 1204:        EXT_COMPACT_UNDER,
+        -: 1205:        EXT_DROP_UNDER,
+        -: 1206:        EXT_MAX_SLEEP,
+        -: 1207:        EXT_MAX_FRAG,
+        -: 1208:        EXT_DROP_UNREAD,
+        -: 1209:        SLAB_AUTOMOVE_FREERATIO, // FIXME: move this back?
+        -: 1210:    };
+        -: 1211:
+       97: 1212:    char *const subopts_tokens[] = {
+        -: 1213:        [EXT_PAGE_SIZE] = "ext_page_size",
+        -: 1214:        [EXT_WBUF_SIZE] = "ext_wbuf_size",
+        -: 1215:        [EXT_THREADS] = "ext_threads",
+        -: 1216:        [EXT_IO_DEPTH] = "ext_io_depth",
+        -: 1217:        [EXT_PATH] = "ext_path",
+        -: 1218:        [EXT_ITEM_SIZE] = "ext_item_size",
+        -: 1219:        [EXT_ITEM_AGE] = "ext_item_age",
+        -: 1220:        [EXT_LOW_TTL] = "ext_low_ttl",
+        -: 1221:        [EXT_RECACHE_RATE] = "ext_recache_rate",
+        -: 1222:        [EXT_COMPACT_UNDER] = "ext_compact_under",
+        -: 1223:        [EXT_DROP_UNDER] = "ext_drop_under",
+        -: 1224:        [EXT_MAX_SLEEP] = "ext_max_sleep",
+        -: 1225:        [EXT_MAX_FRAG] = "ext_max_frag",
+        -: 1226:        [EXT_DROP_UNREAD] = "ext_drop_unread",
+        -: 1227:        [SLAB_AUTOMOVE_FREERATIO] = "slab_automove_freeratio",
+        -: 1228:        NULL
+        -: 1229:    };
+        -: 1230:
+       97: 1231:    switch (getsubopt(subopt, subopts_tokens, &subopts_value)) {
+        9: 1232:        case EXT_PAGE_SIZE:
+        9: 1233:            if (cf->storage_file) {
+    #####: 1234:                fprintf(stderr, "Must specify ext_page_size before any ext_path arguments\n");
+    #####: 1235:                return 1;
+        -: 1236:            }
+        9: 1237:            if (subopts_value == NULL) {
+    #####: 1238:                fprintf(stderr, "Missing ext_page_size argument\n");
+    #####: 1239:                return 1;
+        -: 1240:            }
+        9: 1241:            if (!safe_strtoul(subopts_value, &ext_cf->page_size)) {
+    #####: 1242:                fprintf(stderr, "could not parse argument to ext_page_size\n");
+    #####: 1243:                return 1;
+        -: 1244:            }
+        9: 1245:            ext_cf->page_size *= 1024 * 1024; /* megabytes */
+        9: 1246:            break;
+        9: 1247:        case EXT_WBUF_SIZE:
+        9: 1248:            if (subopts_value == NULL) {
+    #####: 1249:                fprintf(stderr, "Missing ext_wbuf_size argument\n");
+    #####: 1250:                return 1;
+        -: 1251:            }
+        9: 1252:            if (!safe_strtoul(subopts_value, &ext_cf->wbuf_size)) {
+    #####: 1253:                fprintf(stderr, "could not parse argument to ext_wbuf_size\n");
+    #####: 1254:                return 1;
+        -: 1255:            }
+        9: 1256:            ext_cf->wbuf_size *= 1024 * 1024; /* megabytes */
+        9: 1257:            settings.ext_wbuf_size = ext_cf->wbuf_size;
+        9: 1258:            break;
+        9: 1259:        case EXT_THREADS:
+        9: 1260:            if (subopts_value == NULL) {
+    #####: 1261:                fprintf(stderr, "Missing ext_threads argument\n");
+    #####: 1262:                return 1;
+        -: 1263:            }
+        9: 1264:            if (!safe_strtoul(subopts_value, &ext_cf->io_threadcount)) {
+    #####: 1265:                fprintf(stderr, "could not parse argument to ext_threads\n");
+    #####: 1266:                return 1;
+        -: 1267:            }
+        -: 1268:            break;
+        8: 1269:        case EXT_IO_DEPTH:
+        8: 1270:            if (subopts_value == NULL) {
+    #####: 1271:                fprintf(stderr, "Missing ext_io_depth argument\n");
+    #####: 1272:                return 1;
+        -: 1273:            }
+        8: 1274:            if (!safe_strtoul(subopts_value, &ext_cf->io_depth)) {
+    #####: 1275:                fprintf(stderr, "could not parse argument to ext_io_depth\n");
+    #####: 1276:                return 1;
+        -: 1277:            }
+        -: 1278:            break;
+        9: 1279:        case EXT_ITEM_SIZE:
+        9: 1280:            if (subopts_value == NULL) {
+    #####: 1281:                fprintf(stderr, "Missing ext_item_size argument\n");
+    #####: 1282:                return 1;
+        -: 1283:            }
+        9: 1284:            if (!safe_strtoul(subopts_value, &settings.ext_item_size)) {
+    #####: 1285:                fprintf(stderr, "could not parse argument to ext_item_size\n");
+    #####: 1286:                return 1;
+        -: 1287:            }
+        -: 1288:            break;
+        9: 1289:        case EXT_ITEM_AGE:
+        9: 1290:            if (subopts_value == NULL) {
+    #####: 1291:                fprintf(stderr, "Missing ext_item_age argument\n");
+    #####: 1292:                return 1;
+        -: 1293:            }
+        9: 1294:            if (!safe_strtoul(subopts_value, &settings.ext_item_age)) {
+    #####: 1295:                fprintf(stderr, "could not parse argument to ext_item_age\n");
+    #####: 1296:                return 1;
+        -: 1297:            }
+        -: 1298:            break;
+        1: 1299:        case EXT_LOW_TTL:
+        1: 1300:            if (subopts_value == NULL) {
+    #####: 1301:                fprintf(stderr, "Missing ext_low_ttl argument\n");
+    #####: 1302:                return 1;
+        -: 1303:            }
+        1: 1304:            if (!safe_strtoul(subopts_value, &settings.ext_low_ttl)) {
+    #####: 1305:                fprintf(stderr, "could not parse argument to ext_low_ttl\n");
+    #####: 1306:                return 1;
+        -: 1307:            }
+        -: 1308:            break;
+        9: 1309:        case EXT_RECACHE_RATE:
+        9: 1310:            if (subopts_value == NULL) {
+    #####: 1311:                fprintf(stderr, "Missing ext_recache_rate argument\n");
+    #####: 1312:                return 1;
+        -: 1313:            }
+        9: 1314:            if (!safe_strtoul(subopts_value, &settings.ext_recache_rate)) {
+    #####: 1315:                fprintf(stderr, "could not parse argument to ext_recache_rate\n");
+    #####: 1316:                return 1;
+        -: 1317:            }
+        -: 1318:            break;
+        4: 1319:        case EXT_COMPACT_UNDER:
+        4: 1320:            if (subopts_value == NULL) {
+    #####: 1321:                fprintf(stderr, "Missing ext_compact_under argument\n");
+    #####: 1322:                return 1;
+        -: 1323:            }
+        4: 1324:            if (!safe_strtoul(subopts_value, &settings.ext_compact_under)) {
+    #####: 1325:                fprintf(stderr, "could not parse argument to ext_compact_under\n");
+    #####: 1326:                return 1;
+        -: 1327:            }
+        -: 1328:            break;
+    #####: 1329:        case EXT_DROP_UNDER:
+    #####: 1330:            if (subopts_value == NULL) {
+    #####: 1331:                fprintf(stderr, "Missing ext_drop_under argument\n");
+    #####: 1332:                return 1;
+        -: 1333:            }
+    #####: 1334:            if (!safe_strtoul(subopts_value, &settings.ext_drop_under)) {
+    #####: 1335:                fprintf(stderr, "could not parse argument to ext_drop_under\n");
+    #####: 1336:                return 1;
+        -: 1337:            }
+        -: 1338:            break;
+        7: 1339:        case EXT_MAX_SLEEP:
+        7: 1340:            if (subopts_value == NULL) {
+    #####: 1341:                fprintf(stderr, "Missing ext_max_sleep argument\n");
+    #####: 1342:                return 1;
+        -: 1343:            }
+        7: 1344:            if (!safe_strtoul(subopts_value, &settings.ext_max_sleep)) {
+    #####: 1345:                fprintf(stderr, "could not parse argument to ext_max_sleep\n");
+    #####: 1346:                return 1;
+        -: 1347:            }
+        -: 1348:            break;
+        9: 1349:        case EXT_MAX_FRAG:
+        9: 1350:            if (subopts_value == NULL) {
+    #####: 1351:                fprintf(stderr, "Missing ext_max_frag argument\n");
+    #####: 1352:                return 1;
+        -: 1353:            }
+        9: 1354:            if (!safe_strtod(subopts_value, &settings.ext_max_frag)) {
+    #####: 1355:                fprintf(stderr, "could not parse argument to ext_max_frag\n");
+    #####: 1356:                return 1;
+        -: 1357:            }
+        -: 1358:            break;
+    #####: 1359:        case SLAB_AUTOMOVE_FREERATIO:
+    #####: 1360:            if (subopts_value == NULL) {
+    #####: 1361:                fprintf(stderr, "Missing slab_automove_freeratio argument\n");
+    #####: 1362:                return 1;
+        -: 1363:            }
+    #####: 1364:            if (!safe_strtod(subopts_value, &settings.slab_automove_freeratio)) {
+    #####: 1365:                fprintf(stderr, "could not parse argument to slab_automove_freeratio\n");
+    #####: 1366:                return 1;
+        -: 1367:            }
+        -: 1368:            break;
+    #####: 1369:        case EXT_DROP_UNREAD:
+    #####: 1370:            settings.ext_drop_unread = true;
+    #####: 1371:            break;
+       14: 1372:        case EXT_PATH:
+       14: 1373:            if (subopts_value) {
+       14: 1374:                struct extstore_conf_file *tmp = storage_conf_parse(subopts_value, ext_cf->page_size);
+       14: 1375:                if (tmp == NULL) {
+        2: 1376:                    fprintf(stderr, "failed to parse ext_path argument\n");
+        2: 1377:                    return 1;
+        -: 1378:                }
+       12: 1379:                if (cf->storage_file != NULL) {
+        1: 1380:                    tmp->next = cf->storage_file;
+        -: 1381:                }
+       12: 1382:                cf->storage_file = tmp;
+        -: 1383:            } else {
+    #####: 1384:                fprintf(stderr, "missing argument to ext_path, ie: ext_path=/d/file:5G\n");
+    #####: 1385:                return 1;
+        -: 1386:            }
+       12: 1387:            break;
+    #####: 1388:        default:
+    #####: 1389:            fprintf(stderr, "Illegal suboption \"%s\"\n", subopts_value);
+    #####: 1390:            return 1;
+        -: 1391:    }
+        -: 1392:
+        -: 1393:    return 0;
+        -: 1394:}
+        -: 1395:
+      120: 1396:int storage_check_config(void *conf) {
+      120: 1397:    struct storage_settings *cf = conf;
+      120: 1398:    struct extstore_conf *ext_cf = &cf->ext_cf;
+        -: 1399:
+      120: 1400:    if (cf->storage_file) {
+       11: 1401:        if (settings.item_size_max > ext_cf->wbuf_size) {
+    #####: 1402:            fprintf(stderr, "-I (item_size_max: %d) cannot be larger than ext_wbuf_size: %d\n",
+        -: 1403:                settings.item_size_max, ext_cf->wbuf_size);
+    #####: 1404:            return 1;
+        -: 1405:        }
+        -: 1406:
+       11: 1407:        if (settings.udpport) {
+    #####: 1408:            fprintf(stderr, "Cannot use UDP with extstore enabled (-U 0 to disable)\n");
+    #####: 1409:            return 1;
+        -: 1410:        }
+        -: 1411:
+        -: 1412:        return 0;
+        -: 1413:    }
+        -: 1414:
+        -: 1415:    return 2;
+        -: 1416:}
+        -: 1417:
+       11: 1418:void *storage_init(void *conf) {
+       11: 1419:    struct storage_settings *cf = conf;
+       11: 1420:    struct extstore_conf *ext_cf = &cf->ext_cf;
+        -: 1421:
+       11: 1422:    enum extstore_res eres;
+       11: 1423:    void *storage = NULL;
+       11: 1424:    if (settings.ext_compact_under == 0) {
+        -: 1425:        // If changing the default fraction (4), change the help text as well.
+        7: 1426:        settings.ext_compact_under = cf->storage_file->page_count / 4;
+        -: 1427:        /* Only rescues non-COLD items if below this threshold */
+        7: 1428:        settings.ext_drop_under = cf->storage_file->page_count / 4;
+        -: 1429:    }
+       11: 1430:    crc32c_init();
+        -: 1431:
+       11: 1432:    settings.ext_global_pool_min = 0;
+       11: 1433:    storage = extstore_init(cf->storage_file, ext_cf, &eres);
+       11: 1434:    if (storage == NULL) {
+        1: 1435:        fprintf(stderr, "Failed to initialize external storage: %s\n",
+        -: 1436:                extstore_err(eres));
+        1: 1437:        if (eres == EXTSTORE_INIT_OPEN_FAIL) {
+        1: 1438:            perror("extstore open");
+        -: 1439:        }
+        1: 1440:        return NULL;
+        -: 1441:    }
+        -: 1442:
+        -: 1443:    return storage;
+        -: 1444:}
+        -: 1445:
+        -: 1446:#endif

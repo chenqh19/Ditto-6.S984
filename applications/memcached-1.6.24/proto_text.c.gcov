@@ -1,0 +1,3000 @@
+        -:    0:Source:proto_text.c
+        -:    0:Graph:proto_text.gcno
+        -:    0:Data:proto_text.gcda
+        -:    0:Runs:427
+        -:    1:/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+        -:    2:/*
+        -:    3: * Functions for handling the text related protocols, original and meta.
+        -:    4: */
+        -:    5:
+        -:    6:#include "memcached.h"
+        -:    7:#include "proto_text.h"
+        -:    8:// FIXME: only for process_proxy_stats()
+        -:    9:// - some better/different structure for stats subcommands
+        -:   10:// would remove this abstraction leak.
+        -:   11:#include "proto_proxy.h"
+        -:   12:#include "authfile.h"
+        -:   13:#include "storage.h"
+        -:   14:#include "base64.h"
+        -:   15:#ifdef TLS
+        -:   16:#include "tls.h"
+        -:   17:#endif
+        -:   18:#include <string.h>
+        -:   19:#include <stdlib.h>
+        -:   20:
+        -:   21:#define META_SPACE(p) { \
+        -:   22:    *p = ' '; \
+        -:   23:    p++; \
+        -:   24:}
+        -:   25:
+        -:   26:#define META_CHAR(p, c) { \
+        -:   27:    *p = ' '; \
+        -:   28:    *(p+1) = c; \
+        -:   29:    p += 2; \
+        -:   30:}
+        -:   31:
+        -:   32:// NOTE: being a little casual with the write buffer.
+        -:   33:// the buffer needs to be sized that the longest possible meta response will
+        -:   34:// fit. Here we allow the key to fill up to half the write buffer, in case
+        -:   35:// something terrible has gone wrong.
+        -:   36:#define META_KEY(p, key, nkey, bin) { \
+        -:   37:    META_CHAR(p, 'k'); \
+        -:   38:    if (!bin) { \
+        -:   39:        memcpy(p, key, nkey); \
+        -:   40:        p += nkey; \
+        -:   41:    } else { \
+        -:   42:        p += base64_encode((unsigned char *) key, nkey, (unsigned char *)p, WRITE_BUFFER_SIZE / 2); \
+        -:   43:        *p = ' '; \
+        -:   44:        *(p+1) = 'b'; \
+        -:   45:        p += 2; \
+        -:   46:    } \
+        -:   47:}
+        -:   48:
+        -:   49:typedef struct token_s {
+        -:   50:    char *value;
+        -:   51:    size_t length;
+        -:   52:} token_t;
+        -:   53:
+       43:   54:static void _finalize_mset(conn *c, int nbytes, enum store_item_type ret) {
+       43:   55:    mc_resp *resp = c->resp;
+       43:   56:    item *it = c->item;
+       43:   57:    conn_set_state(c, conn_new_cmd);
+        -:   58:
+        -:   59:    // information about the response line has been stashed in wbuf.
+       43:   60:    char *p = resp->wbuf + resp->wbytes;
+       43:   61:    char *end = p; // end of the stashed data portion.
+        -:   62:
+       43:   63:    switch (ret) {
+        -:   64:    case STORED:
+       36:   65:      memcpy(p, "HD", 2);
+        -:   66:      // Only place noreply is used for meta cmds is a nominal response.
+       36:   67:      if (c->noreply) {
+        2:   68:          resp->skip = true;
+        -:   69:      }
+        -:   70:      break;
+        -:   71:    case EXISTS:
+        3:   72:      memcpy(p, "EX", 2);
+        -:   73:      break;
+        -:   74:    case NOT_FOUND:
+    #####:   75:      memcpy(p, "NF", 2);
+        -:   76:      break;
+        -:   77:    case NOT_STORED:
+        4:   78:      memcpy(p, "NS", 2);
+        -:   79:      break;
+    #####:   80:    default:
+    #####:   81:      c->noreply = false;
+    #####:   82:      out_string(c, "SERVER_ERROR Unhandled storage type.");
+    #####:   83:      return;
+        -:   84:    }
+       43:   85:    p += 2;
+        -:   86:
+       59:   87:    for (char *fp = resp->wbuf; fp < end; fp++) {
+       16:   88:        switch (*fp) {
+        1:   89:            case 'O':
+        -:   90:                // Copy stashed opaque.
+        1:   91:                META_SPACE(p);
+        6:   92:                while (fp < end && *fp != ' ') {
+        5:   93:                    *p = *fp;
+        5:   94:                    p++;
+        5:   95:                    fp++;
+        -:   96:                }
+        -:   97:                break;
+        1:   98:            case 'k':
+        -:   99:                // Encode the key here instead of earlier to minimize copying.
+       1*:  100:                META_KEY(p, ITEM_key(it), it->nkey, (it->it_flags & ITEM_KEY_BINARY));
+        -:  101:                break;
+        4:  102:            case 'c':
+        -:  103:                // We don't have the CAS until this point, which is why we
+        -:  104:                // generate this line so late.
+        4:  105:                META_CHAR(p, 'c');
+        4:  106:                p = itoa_u64(c->cas, p);
+        4:  107:                break;
+        2:  108:            case 's':
+        -:  109:                // Get final item size, ie from append/prepend
+        2:  110:                META_CHAR(p, 's');
+        -:  111:                // If the size changed during append/prepend
+        2:  112:                if (nbytes != 0) {
+        1:  113:                    p = itoa_u32(nbytes-2, p);
+        -:  114:                } else {
+        1:  115:                    p = itoa_u32(it->nbytes-2, p);
+        -:  116:                }
+        -:  117:                break;
+        -:  118:            default:
+        -:  119:                break;
+        -:  120:        }
+        -:  121:    }
+        -:  122:
+       43:  123:    memcpy(p, "\r\n", 2);
+       43:  124:    p += 2;
+        -:  125:    // we're offset into wbuf, but good convention to track wbytes.
+       43:  126:    resp->wbytes = p - resp->wbuf;
+       43:  127:    resp_add_iov(resp, end, p - end);
+        -:  128:}
+        -:  129:
+        -:  130:/*
+        -:  131: * we get here after reading the value in set/add/replace commands. The command
+        -:  132: * has been stored in c->cmd, and the item is ready in c->item.
+        -:  133: */
+   302983:  134:void complete_nread_ascii(conn *c) {
+  302983*:  135:    assert(c != NULL);
+        -:  136:
+   302983:  137:    item *it = c->item;
+   302983:  138:    int comm = c->cmd;
+   302983:  139:    enum store_item_type ret;
+   302983:  140:    bool is_valid = false;
+   302983:  141:    int nbytes = 0;
+        -:  142:
+   302983:  143:    pthread_mutex_lock(&c->thread->stats.mutex);
+   302983:  144:    c->thread->stats.slab_stats[ITEM_clsid(it)].set_cmds++;
+   302983:  145:    pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  146:
+   302983:  147:    if ((it->it_flags & ITEM_CHUNKED) == 0) {
+   295741:  148:        if (strncmp(ITEM_data(it) + it->nbytes - 2, "\r\n", 2) == 0) {
+        -:  149:            is_valid = true;
+        -:  150:        }
+        -:  151:    } else {
+     7242:  152:        char buf[2];
+        -:  153:        /* should point to the final item chunk */
+     7242:  154:        item_chunk *ch = (item_chunk *) c->ritem;
+    7242*:  155:        assert(ch->used != 0);
+        -:  156:        /* :( We need to look at the last two bytes. This could span two
+        -:  157:         * chunks.
+        -:  158:         */
+     7242:  159:        if (ch->used > 1) {
+     7242:  160:            buf[0] = ch->data[ch->used - 2];
+     7242:  161:            buf[1] = ch->data[ch->used - 1];
+        -:  162:        } else {
+    #####:  163:            assert(ch->prev);
+    #####:  164:            assert(ch->used == 1);
+    #####:  165:            buf[0] = ch->prev->data[ch->prev->used - 1];
+    #####:  166:            buf[1] = ch->data[ch->used - 1];
+        -:  167:        }
+     7242:  168:        if (strncmp(buf, "\r\n", 2) == 0) {
+     7242:  169:            is_valid = true;
+        -:  170:        } else {
+    #####:  171:            assert(1 == 0);
+        -:  172:        }
+        -:  173:    }
+        -:  174:
+    7242*:  175:    if (!is_valid) {
+        -:  176:        // metaset mode always returns errors.
+    #####:  177:        if (c->mset_res) {
+    #####:  178:            c->noreply = false;
+        -:  179:        }
+    #####:  180:        out_string(c, "CLIENT_ERROR bad data chunk");
+        -:  181:    } else {
+   302983:  182:      uint64_t cas = 0;
+   302983:  183:      c->thread->cur_sfd = c->sfd; // cuddle sfd for logging.
+   302983:  184:      ret = store_item(it, comm, c->thread, &nbytes, &cas, c->set_stale);
+        -:  185:
+        -:  186:#ifdef ENABLE_DTRACE
+        -:  187:      switch (c->cmd) {
+        -:  188:      case NREAD_ADD:
+        -:  189:          MEMCACHED_COMMAND_ADD(c->sfd, ITEM_key(it), it->nkey,
+        -:  190:                                (ret == 1) ? it->nbytes : -1, cas);
+        -:  191:          break;
+        -:  192:      case NREAD_REPLACE:
+        -:  193:          MEMCACHED_COMMAND_REPLACE(c->sfd, ITEM_key(it), it->nkey,
+        -:  194:                                    (ret == 1) ? it->nbytes : -1, cas);
+        -:  195:          break;
+        -:  196:      case NREAD_APPEND:
+        -:  197:          MEMCACHED_COMMAND_APPEND(c->sfd, ITEM_key(it), it->nkey,
+        -:  198:                                   (ret == 1) ? it->nbytes : -1, cas);
+        -:  199:          break;
+        -:  200:      case NREAD_PREPEND:
+        -:  201:          MEMCACHED_COMMAND_PREPEND(c->sfd, ITEM_key(it), it->nkey,
+        -:  202:                                    (ret == 1) ? it->nbytes : -1, cas);
+        -:  203:          break;
+        -:  204:      case NREAD_SET:
+        -:  205:          MEMCACHED_COMMAND_SET(c->sfd, ITEM_key(it), it->nkey,
+        -:  206:                                (ret == 1) ? it->nbytes : -1, cas);
+        -:  207:          break;
+        -:  208:      case NREAD_CAS:
+        -:  209:          MEMCACHED_COMMAND_CAS(c->sfd, ITEM_key(it), it->nkey, it->nbytes,
+        -:  210:                                cas);
+        -:  211:          break;
+        -:  212:      }
+        -:  213:#endif
+        -:  214:
+   302983:  215:      if (c->mset_res) {
+       43:  216:          c->cas = cas;
+       43:  217:          _finalize_mset(c, nbytes, ret);
+        -:  218:      } else {
+   302940:  219:          switch (ret) {
+   302302:  220:          case STORED:
+   302302:  221:              out_string(c, "STORED");
+   302302:  222:              break;
+        5:  223:          case EXISTS:
+        5:  224:              out_string(c, "EXISTS");
+        5:  225:              break;
+        2:  226:          case NOT_FOUND:
+        2:  227:              out_string(c, "NOT_FOUND");
+        2:  228:              break;
+      631:  229:          case NOT_STORED:
+      631:  230:              out_string(c, "NOT_STORED");
+      631:  231:              break;
+    #####:  232:          default:
+    #####:  233:              out_string(c, "SERVER_ERROR Unhandled storage type.");
+        -:  234:          }
+        -:  235:      }
+        -:  236:
+        -:  237:    }
+        -:  238:
+   302983:  239:    c->set_stale = false; /* force flag to be off just in case */
+   302983:  240:    c->mset_res = false;
+   302983:  241:    item_remove(c->item);       /* release the c->item reference */
+   302983:  242:    c->item = 0;
+   302983:  243:}
+        -:  244:
+        -:  245:#define COMMAND_TOKEN 0
+        -:  246:#define SUBCOMMAND_TOKEN 1
+        -:  247:#define KEY_TOKEN 1
+        -:  248:
+        -:  249:#define MAX_TOKENS 24
+        -:  250:
+        -:  251:#define WANT_TOKENS(ntokens, min, max) \
+        -:  252:    do { \
+        -:  253:        if ((min != -1 && ntokens < min) || (max != -1 && ntokens > max)) { \
+        -:  254:            out_string(c, "ERROR"); \
+        -:  255:            return; \
+        -:  256:        } \
+        -:  257:    } while (0)
+        -:  258:
+        -:  259:#define WANT_TOKENS_OR(ntokens, a, b) \
+        -:  260:    do { \
+        -:  261:        if (ntokens != a && ntokens != b) { \
+        -:  262:            out_string(c, "ERROR"); \
+        -:  263:            return; \
+        -:  264:        } \
+        -:  265:    } while (0)
+        -:  266:
+        -:  267:#define WANT_TOKENS_MIN(ntokens, min) \
+        -:  268:    do { \
+        -:  269:        if (ntokens < min) { \
+        -:  270:            out_string(c, "ERROR"); \
+        -:  271:            return; \
+        -:  272:        } \
+        -:  273:    } while (0)
+        -:  274:
+        -:  275:/*
+        -:  276: * Tokenize the command string by replacing whitespace with '\0' and update
+        -:  277: * the token array tokens with pointer to start of each token and length.
+        -:  278: * Returns total number of tokens.  The last valid token is the terminal
+        -:  279: * token (value points to the first unprocessed character of the string and
+        -:  280: * length zero).
+        -:  281: *
+        -:  282: * Usage example:
+        -:  283: *
+        -:  284: *  while(tokenize_command(command, ncommand, tokens, max_tokens) > 0) {
+        -:  285: *      for(int ix = 0; tokens[ix].length != 0; ix++) {
+        -:  286: *          ...
+        -:  287: *      }
+        -:  288: *      ncommand = tokens[ix].value - command;
+        -:  289: *      command  = tokens[ix].value;
+        -:  290: *   }
+        -:  291: */
+   566850:  292:static size_t tokenize_command(char *command, token_t *tokens, const size_t max_tokens) {
+   566850:  293:    char *s, *e;
+   566850:  294:    size_t ntokens = 0;
+  566850*:  295:    assert(command != NULL && tokens != NULL && max_tokens > 1);
+   566850:  296:    size_t len = strlen(command);
+   566850:  297:    unsigned int i = 0;
+        -:  298:
+   566850:  299:    s = e = command;
+ 28442081:  300:    for (i = 0; i < len; i++) {
+ 27876076:  301:        if (*e == ' ') {
+  1657612:  302:            if (s != e) {
+  1657598:  303:                tokens[ntokens].value = s;
+  1657598:  304:                tokens[ntokens].length = e - s;
+  1657598:  305:                ntokens++;
+  1657598:  306:                *e = '\0';
+  1657598:  307:                if (ntokens == max_tokens - 1) {
+      845:  308:                    e++;
+      845:  309:                    s = e; /* so we don't add an extra token */
+      845:  310:                    break;
+        -:  311:                }
+        -:  312:            }
+  1656767:  313:            s = e + 1;
+        -:  314:        }
+ 27875231:  315:        e++;
+        -:  316:    }
+        -:  317:
+   566850:  318:    if (s != e) {
+   566000:  319:        tokens[ntokens].value = s;
+   566000:  320:        tokens[ntokens].length = e - s;
+   566000:  321:        ntokens++;
+        -:  322:    }
+        -:  323:
+        -:  324:    /*
+        -:  325:     * If we scanned the whole string, the terminal value pointer is null,
+        -:  326:     * otherwise it is the first unprocessed character.
+        -:  327:     */
+   566850:  328:    tokens[ntokens].value =  *e == '\0' ? NULL : e;
+   566850:  329:    tokens[ntokens].length = 0;
+   566850:  330:    ntokens++;
+        -:  331:
+   566850:  332:    return ntokens;
+        -:  333:}
+        -:  334:
+        5:  335:int try_read_command_asciiauth(conn *c) {
+        5:  336:    token_t tokens[MAX_TOKENS];
+        5:  337:    size_t ntokens;
+        5:  338:    char *cont = NULL;
+        -:  339:
+        -:  340:    // TODO: move to another function.
+        5:  341:    if (!c->sasl_started) {
+        5:  342:        char *el;
+        5:  343:        uint32_t size = 0;
+        -:  344:
+        -:  345:        // impossible for the auth command to be this short.
+        5:  346:        if (c->rbytes < 2)
+        1:  347:            return 0;
+        -:  348:
+        5:  349:        el = memchr(c->rcurr, '\n', c->rbytes);
+        -:  350:
+        -:  351:        // If no newline after 1k, getting junk data, close out.
+        5:  352:        if (!el) {
+    #####:  353:            if (c->rbytes > 2048) {
+    #####:  354:                conn_set_state(c, conn_closing);
+    #####:  355:                return 1;
+        -:  356:            }
+        -:  357:            return 0;
+        -:  358:        }
+        -:  359:
+        -:  360:        // Looking for: "set foo 0 0 N\r\nuser pass\r\n"
+        -:  361:        // key, flags, and ttl are ignored. N is used to see if we have the rest.
+        -:  362:
+        -:  363:        // so tokenize doesn't walk past into the value.
+        -:  364:        // it's fine to leave the \r in, as strtoul will stop at it.
+        5:  365:        *el = '\0';
+        -:  366:
+        5:  367:        ntokens = tokenize_command(c->rcurr, tokens, MAX_TOKENS);
+        -:  368:        // ensure the buffer is consumed.
+        5:  369:        c->rbytes -= (el - c->rcurr) + 1;
+        5:  370:        c->rcurr += (el - c->rcurr) + 1;
+        -:  371:
+        -:  372:        // final token is a NULL ender, so we have one more than expected.
+        5:  373:        if (ntokens < 6
+        4:  374:                || strcmp(tokens[0].value, "set") != 0
+        4:  375:                || !safe_strtoul(tokens[4].value, &size)) {
+        1:  376:            if (!c->resp) {
+        1:  377:                if (!resp_start(c)) {
+    #####:  378:                    conn_set_state(c, conn_closing);
+    #####:  379:                    return 1;
+        -:  380:                }
+        -:  381:            }
+        1:  382:            out_string(c, "CLIENT_ERROR unauthenticated");
+        1:  383:            return 1;
+        -:  384:        }
+        -:  385:
+        -:  386:        // we don't actually care about the key at all; it can be anything.
+        -:  387:        // we do care about the size of the remaining read.
+        4:  388:        c->rlbytes = size + 2;
+        -:  389:
+        4:  390:        c->sasl_started = true; // reuse from binprot sasl, but not sasl :)
+        -:  391:    }
+        -:  392:
+        4:  393:    if (c->rbytes < c->rlbytes) {
+        -:  394:        // need more bytes.
+        -:  395:        return 0;
+        -:  396:    }
+        -:  397:
+        -:  398:    // Going to respond at this point, so attach a response object.
+        4:  399:    if (!c->resp) {
+        4:  400:        if (!resp_start(c)) {
+    #####:  401:            conn_set_state(c, conn_closing);
+    #####:  402:            return 1;
+        -:  403:        }
+        -:  404:    }
+        -:  405:
+        4:  406:    cont = c->rcurr;
+        -:  407:    // advance buffer. no matter what we're stopping.
+        4:  408:    c->rbytes -= c->rlbytes;
+        4:  409:    c->rcurr += c->rlbytes;
+        4:  410:    c->sasl_started = false;
+        -:  411:
+        -:  412:    // must end with \r\n
+        -:  413:    // NB: I thought ASCII sets also worked with just \n, but according to
+        -:  414:    // complete_nread_ascii only \r\n is valid.
+        4:  415:    if (strncmp(cont + c->rlbytes - 2, "\r\n", 2) != 0) {
+    #####:  416:        out_string(c, "CLIENT_ERROR bad command line termination");
+    #####:  417:        return 1;
+        -:  418:    }
+        -:  419:
+        -:  420:    // payload should be "user pass", so we can use the tokenizer.
+        4:  421:    cont[c->rlbytes - 2] = '\0';
+        4:  422:    ntokens = tokenize_command(cont, tokens, MAX_TOKENS);
+        -:  423:
+        4:  424:    if (ntokens < 3) {
+        1:  425:        out_string(c, "CLIENT_ERROR bad authentication token format");
+        1:  426:        return 1;
+        -:  427:    }
+        -:  428:
+        3:  429:    if (authfile_check(tokens[0].value, tokens[1].value) == 1) {
+        2:  430:        out_string(c, "STORED");
+        2:  431:        c->authenticated = true;
+        2:  432:        c->try_read_command = try_read_command_ascii;
+        2:  433:        pthread_mutex_lock(&c->thread->stats.mutex);
+        2:  434:        c->thread->stats.auth_cmds++;
+        2:  435:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  436:    } else {
+        1:  437:        out_string(c, "CLIENT_ERROR authentication failure");
+        1:  438:        pthread_mutex_lock(&c->thread->stats.mutex);
+        1:  439:        c->thread->stats.auth_cmds++;
+        1:  440:        c->thread->stats.auth_errors++;
+        1:  441:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  442:    }
+        -:  443:
+        -:  444:    return 1;
+        -:  445:}
+        -:  446:
+   566433:  447:int try_read_command_ascii(conn *c) {
+   566433:  448:    char *el, *cont;
+        -:  449:
+   566433:  450:    if (c->rbytes == 0)
+        -:  451:        return 0;
+        -:  452:
+   566433:  453:    el = memchr(c->rcurr, '\n', c->rbytes);
+   566433:  454:    if (!el) {
+      435:  455:        if (c->rbytes > 2048) {
+        -:  456:            /*
+        -:  457:             * We didn't have a '\n' in the first few k. This _has_ to be a
+        -:  458:             * large multiget, if not we should just nuke the connection.
+        -:  459:             */
+        -:  460:            char *ptr = c->rcurr;
+     4201:  461:            while (*ptr == ' ') { /* ignore leading whitespaces */
+     4196:  462:                ++ptr;
+        -:  463:            }
+        -:  464:
+        5:  465:            if (ptr - c->rcurr > 100 ||
+        3:  466:                (strncmp(ptr, "get ", 4) && strncmp(ptr, "gets ", 5))) {
+        -:  467:
+        2:  468:                conn_set_state(c, conn_closing);
+        2:  469:                return 1;
+        -:  470:            }
+        -:  471:
+        -:  472:            // ASCII multigets are unbound, so our fixed size rbuf may not
+        -:  473:            // work for this particular workload... For backcompat we'll use a
+        -:  474:            // malloc/realloc/free routine just for this.
+        3:  475:            if (!c->rbuf_malloced) {
+        3:  476:                if (!rbuf_switch_to_malloc(c)) {
+    #####:  477:                    conn_set_state(c, conn_closing);
+    #####:  478:                    return 1;
+        -:  479:                }
+        -:  480:            }
+        -:  481:        }
+        -:  482:
+      433:  483:        return 0;
+        -:  484:    }
+   565998:  485:    cont = el + 1;
+   565998:  486:    if ((el - c->rcurr) > 1 && *(el - 1) == '\r') {
+   485977:  487:        el--;
+        -:  488:    }
+   565998:  489:    *el = '\0';
+        -:  490:
+  565998*:  491:    assert(cont <= (c->rcurr + c->rbytes));
+        -:  492:
+   565998:  493:    c->last_cmd_time = current_time;
+   565998:  494:    process_command_ascii(c, c->rcurr);
+        -:  495:
+   565998:  496:    c->rbytes -= (cont - c->rcurr);
+   565998:  497:    c->rcurr = cont;
+        -:  498:
+  565998*:  499:    assert(c->rcurr <= (c->rbuf + c->rsize));
+        -:  500:
+        -:  501:    return 1;
+        -:  502:}
+        -:  503:
+        -:  504:
+        -:  505:static inline bool set_noreply_maybe(conn *c, token_t *tokens, size_t ntokens)
+        -:  506:{
+        -:  507:    int noreply_index = ntokens - 2;
+        -:  508:
+        -:  509:    /*
+        -:  510:      NOTE: this function is not the first place where we are going to
+        -:  511:      send the reply.  We could send it instead from process_command()
+        -:  512:      if the request line has wrong number of tokens.  However parsing
+        -:  513:      malformed line for "noreply" option is not reliable anyway, so
+        -:  514:      it can't be helped.
+        -:  515:    */
+        -:  516:    if (tokens[noreply_index].value
+        -:  517:        && strcmp(tokens[noreply_index].value, "noreply") == 0) {
+        -:  518:        c->noreply = true;
+        -:  519:    }
+        -:  520:    return c->noreply;
+        -:  521:}
+        -:  522:
+        -:  523:/* client flags == 0 means use no storage for client flags */
+    50559:  524:static inline int make_ascii_get_suffix(char *suffix, item *it, bool return_cas, int nbytes) {
+    50559:  525:    char *p = suffix;
+    50559:  526:    *p = ' ';
+    50559:  527:    p++;
+    50559:  528:    if (FLAGS_SIZE(it) == 0) {
+    50555:  529:        *p = '0';
+    50555:  530:        p++;
+        -:  531:    } else {
+        4:  532:        p = itoa_u64(*((client_flags_t *) ITEM_suffix(it)), p);
+        -:  533:    }
+    50559:  534:    *p = ' ';
+    50559:  535:    p = itoa_u32(nbytes-2, p+1);
+        -:  536:
+    50559:  537:    if (return_cas) {
+       25:  538:        *p = ' ';
+       25:  539:        p = itoa_u64(ITEM_get_cas(it), p+1);
+        -:  540:    }
+        -:  541:
+    50559:  542:    *p = '\r';
+    50559:  543:    *(p+1) = '\n';
+    50559:  544:    *(p+2) = '\0';
+    50559:  545:    return (p - suffix) + 2;
+        -:  546:}
+        -:  547:
+        -:  548:/* ntokens is overwritten here... shrug.. */
+   112696:  549:static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens, bool return_cas, bool should_touch) {
+   112696:  550:    char *key;
+   112696:  551:    size_t nkey;
+   112696:  552:    item *it;
+   112696:  553:    token_t *key_token = &tokens[KEY_TOKEN];
+   112696:  554:    int32_t exptime_int = 0;
+   112696:  555:    rel_time_t exptime = 0;
+   112696:  556:    bool fail_length = false;
+  112696*:  557:    assert(c != NULL);
+   112696:  558:    mc_resp *resp = c->resp;
+        -:  559:
+   112696:  560:    if (should_touch) {
+        -:  561:        // For get and touch commands, use first token as exptime
+        6:  562:        if (!safe_strtol(tokens[1].value, &exptime_int)) {
+    #####:  563:            out_string(c, "CLIENT_ERROR invalid exptime argument");
+    #####:  564:            return;
+        -:  565:        }
+        6:  566:        key_token++;
+       11:  567:        exptime = realtime(EXPTIME_TO_POSITIVE_TIME(exptime_int));
+        -:  568:    }
+        -:  569:
+        -:  570:    do {
+   245702:  571:        while(key_token->length != 0) {
+   132166:  572:            bool overflow; // not used here.
+   132166:  573:            key = key_token->value;
+   132166:  574:            nkey = key_token->length;
+        -:  575:
+   132166:  576:            if (nkey > KEY_MAX_LENGTH) {
+        2:  577:                fail_length = true;
+        4:  578:                goto stop;
+        -:  579:            }
+        -:  580:
+   132164:  581:            it = limited_get(key, nkey, c->thread, exptime, should_touch, DO_UPDATE, &overflow);
+   132164:  582:            if (settings.detail_enabled) {
+        3:  583:                stats_prefix_record_get(key, nkey, NULL != it);
+        -:  584:            }
+   132164:  585:            if (it) {
+        -:  586:                /*
+        -:  587:                 * Construct the response. Each hit adds three elements to the
+        -:  588:                 * outgoing data list:
+        -:  589:                 *   "VALUE "
+        -:  590:                 *   key
+        -:  591:                 *   " " + flags + " " + data length + "\r\n" + data (with \r\n)
+        -:  592:                 */
+        -:  593:
+        -:  594:                {
+        -:  595:                  MEMCACHED_COMMAND_GET(c->sfd, ITEM_key(it), it->nkey,
+    50559:  596:                                        it->nbytes, ITEM_get_cas(it));
+    50559:  597:                  int nbytes = it->nbytes;
+    50559:  598:                  char *p = resp->wbuf;
+    50559:  599:                  memcpy(p, "VALUE ", 6);
+    50559:  600:                  p += 6;
+    50559:  601:                  memcpy(p, ITEM_key(it), it->nkey);
+    50559:  602:                  p += it->nkey;
+    50559:  603:                  p += make_ascii_get_suffix(p, it, return_cas, nbytes);
+    50559:  604:                  resp_add_iov(resp, resp->wbuf, p - resp->wbuf);
+        -:  605:
+        -:  606:#ifdef EXTSTORE
+    50559:  607:                  if (it->it_flags & ITEM_HDR) {
+      356:  608:                      if (storage_get_item(c, it, resp) != 0) {
+        1:  609:                          pthread_mutex_lock(&c->thread->stats.mutex);
+        1:  610:                          c->thread->stats.get_oom_extstore++;
+        1:  611:                          pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  612:
+        1:  613:                          item_remove(it);
+        1:  614:                          goto stop;
+        -:  615:                      }
+    50203:  616:                  } else if ((it->it_flags & ITEM_CHUNKED) == 0) {
+    31783:  617:                      resp_add_iov(resp, ITEM_data(it), it->nbytes);
+        -:  618:                  } else {
+    18420:  619:                      resp_add_chunked_iov(resp, it, it->nbytes);
+        -:  620:                  }
+        -:  621:#else
+        -:  622:                  if ((it->it_flags & ITEM_CHUNKED) == 0) {
+        -:  623:                      resp_add_iov(resp, ITEM_data(it), it->nbytes);
+        -:  624:                  } else {
+        -:  625:                      resp_add_chunked_iov(resp, it, it->nbytes);
+        -:  626:                  }
+        -:  627:#endif
+        -:  628:                }
+        -:  629:
+    50558:  630:                if (settings.verbose > 1) {
+    #####:  631:                    int ii;
+    #####:  632:                    fprintf(stderr, ">%d sending key ", c->sfd);
+    #####:  633:                    for (ii = 0; ii < it->nkey; ++ii) {
+    #####:  634:                        fprintf(stderr, "%c", key[ii]);
+        -:  635:                    }
+    #####:  636:                    fprintf(stderr, "\n");
+        -:  637:                }
+        -:  638:
+        -:  639:                /* item_get() has incremented it->refcount for us */
+    50558:  640:                pthread_mutex_lock(&c->thread->stats.mutex);
+    50558:  641:                if (should_touch) {
+        7:  642:                    c->thread->stats.touch_cmds++;
+        7:  643:                    c->thread->stats.slab_stats[ITEM_clsid(it)].touch_hits++;
+        -:  644:                } else {
+    50551:  645:                    c->thread->stats.lru_hits[it->slabs_clsid]++;
+    50551:  646:                    c->thread->stats.get_cmds++;
+        -:  647:                }
+    50558:  648:                pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  649:#ifdef EXTSTORE
+        -:  650:                /* If ITEM_HDR, an io_wrap owns the reference. */
+    50558:  651:                if ((it->it_flags & ITEM_HDR) == 0) {
+    50203:  652:                    resp->item = it;
+        -:  653:                }
+        -:  654:#else
+        -:  655:                resp->item = it;
+        -:  656:#endif
+        -:  657:            } else {
+    81605:  658:                pthread_mutex_lock(&c->thread->stats.mutex);
+    81605:  659:                if (should_touch) {
+        1:  660:                    c->thread->stats.touch_cmds++;
+        1:  661:                    c->thread->stats.touch_misses++;
+        -:  662:                } else {
+    81604:  663:                    c->thread->stats.get_misses++;
+    81604:  664:                    c->thread->stats.get_cmds++;
+        -:  665:                }
+    81605:  666:                MEMCACHED_COMMAND_GET(c->sfd, key, nkey, -1, 0);
+    81605:  667:                pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  668:            }
+        -:  669:
+   132163:  670:            key_token++;
+   132163:  671:            if (key_token->length != 0) {
+    18627:  672:                if (!resp_start(c)) {
+        1:  673:                    goto stop;
+        -:  674:                }
+    18626:  675:                resp = c->resp;
+        -:  676:            }
+        -:  677:        }
+        -:  678:
+        -:  679:        /*
+        -:  680:         * If the command string hasn't been fully processed, get the next set
+        -:  681:         * of tokens.
+        -:  682:         */
+   113536:  683:        if (key_token->value != NULL) {
+      844:  684:            ntokens = tokenize_command(key_token->value, tokens, MAX_TOKENS);
+      844:  685:            key_token = tokens;
+      844:  686:            if (!resp_start(c)) {
+    #####:  687:                goto stop;
+        -:  688:            }
+      844:  689:            resp = c->resp;
+        -:  690:        }
+   113536:  691:    } while(key_token->value != NULL);
+   112692:  692:stop:
+        -:  693:
+   112696:  694:    if (settings.verbose > 1)
+    #####:  695:        fprintf(stderr, ">%d END\n", c->sfd);
+        -:  696:
+        -:  697:    /*
+        -:  698:        If the loop was terminated because of out-of-memory, it is not
+        -:  699:        reliable to add END\r\n to the buffer, because it might not end
+        -:  700:        in \r\n. So we send SERVER_ERROR instead.
+        -:  701:    */
+   112696:  702:    if (key_token->value != NULL) {
+        -:  703:        // Kill any stacked responses we had.
+        4:  704:        conn_release_items(c);
+        -:  705:        // Start a new response object for the error message.
+        4:  706:        if (!resp_start(c)) {
+        -:  707:            // severe out of memory error.
+    #####:  708:            conn_set_state(c, conn_closing);
+    #####:  709:            return;
+        -:  710:        }
+        4:  711:        if (fail_length) {
+        2:  712:            out_string(c, "CLIENT_ERROR bad command line format");
+        -:  713:        } else {
+        2:  714:            out_of_memory(c, "SERVER_ERROR out of memory writing get response");
+        -:  715:        }
+        -:  716:    } else {
+        -:  717:        // Tag the end token onto the most recent response object.
+   112692:  718:        resp_add_iov(resp, "END\r\n", 5);
+   112692:  719:        conn_set_state(c, conn_mwrite);
+        -:  720:    }
+        -:  721:}
+        -:  722:
+       10:  723:inline static void process_stats_detail(conn *c, const char *command) {
+      10*:  724:    assert(c != NULL);
+        -:  725:
+       10:  726:    if (strcmp(command, "on") == 0) {
+        1:  727:        settings.detail_enabled = 1;
+        1:  728:        out_string(c, "OK");
+        -:  729:    }
+        9:  730:    else if (strcmp(command, "off") == 0) {
+        1:  731:        settings.detail_enabled = 0;
+        1:  732:        out_string(c, "OK");
+        -:  733:    }
+        8:  734:    else if (strcmp(command, "dump") == 0) {
+        8:  735:        int len;
+        8:  736:        char *stats = stats_prefix_dump(&len);
+        8:  737:        write_and_free(c, stats, len);
+        -:  738:    }
+        -:  739:    else {
+    #####:  740:        out_string(c, "CLIENT_ERROR usage: stats detail on|off|dump");
+        -:  741:    }
+       10:  742:}
+        -:  743:
+     5371:  744:static void process_stat(conn *c, token_t *tokens, const size_t ntokens) {
+     5371:  745:    const char *subcommand = tokens[SUBCOMMAND_TOKEN].value;
+    5371*:  746:    assert(c != NULL);
+        -:  747:
+     5371:  748:    if (ntokens < 2) {
+    #####:  749:        out_string(c, "CLIENT_ERROR bad command line");
+    #####:  750:        return;
+        -:  751:    }
+        -:  752:
+     5371:  753:    if (ntokens == 2) {
+     3765:  754:        server_stats(&append_stats, c);
+     3765:  755:        (void)get_stats(NULL, 0, &append_stats, c);
+     1606:  756:    } else if (strcmp(subcommand, "reset") == 0) {
+        3:  757:        stats_reset();
+        3:  758:        out_string(c, "RESET");
+        3:  759:        return;
+     1603:  760:    } else if (strcmp(subcommand, "detail") == 0) {
+        -:  761:        /* NOTE: how to tackle detail with binary? */
+       10:  762:        if (ntokens < 4)
+    #####:  763:            process_stats_detail(c, "");  /* outputs the error message */
+        -:  764:        else
+       10:  765:            process_stats_detail(c, tokens[2].value);
+        -:  766:        /* Output already generated */
+       10:  767:        return;
+     1593:  768:    } else if (strcmp(subcommand, "settings") == 0) {
+       20:  769:        process_stat_settings(&append_stats, c);
+     1573:  770:    } else if (strcmp(subcommand, "cachedump") == 0) {
+        3:  771:        char *buf;
+        3:  772:        unsigned int bytes, id, limit = 0;
+        -:  773:
+        3:  774:        if (!settings.dump_enabled) {
+    #####:  775:            out_string(c, "CLIENT_ERROR stats cachedump not allowed");
+    #####:  776:            return;
+        -:  777:        }
+        -:  778:
+        3:  779:        if (ntokens < 5) {
+    #####:  780:            out_string(c, "CLIENT_ERROR bad command line");
+    #####:  781:            return;
+        -:  782:        }
+        -:  783:
+        6:  784:        if (!safe_strtoul(tokens[2].value, &id) ||
+        3:  785:            !safe_strtoul(tokens[3].value, &limit)) {
+    #####:  786:            out_string(c, "CLIENT_ERROR bad command line format");
+    #####:  787:            return;
+        -:  788:        }
+        -:  789:
+        3:  790:        if (id >= MAX_NUMBER_OF_SLAB_CLASSES) {
+        1:  791:            out_string(c, "CLIENT_ERROR Illegal slab id");
+        1:  792:            return;
+        -:  793:        }
+        -:  794:
+        2:  795:        buf = item_cachedump(id, limit, &bytes);
+        2:  796:        write_and_free(c, buf, bytes);
+        2:  797:        return;
+     1570:  798:    } else if (strcmp(subcommand, "conns") == 0) {
+        4:  799:        process_stats_conns(&append_stats, c);
+        -:  800:#ifdef EXTSTORE
+     1566:  801:    } else if (strcmp(subcommand, "extstore") == 0) {
+    #####:  802:        process_extstore_stats(&append_stats, c);
+        -:  803:#endif
+        -:  804:#ifdef PROXY
+        -:  805:    } else if (strcmp(subcommand, "proxy") == 0) {
+        -:  806:        process_proxy_stats(settings.proxy_ctx, &append_stats, c);
+        -:  807:    } else if (strcmp(subcommand, "proxyfuncs") == 0) {
+        -:  808:        process_proxy_funcstats(settings.proxy_ctx, &append_stats, c);
+        -:  809:#endif
+        -:  810:    } else {
+        -:  811:        /* getting here means that the subcommand is either engine specific or
+        -:  812:           is invalid. query the engine and see. */
+     1566:  813:        if (get_stats(subcommand, strlen(subcommand), &append_stats, c)) {
+     1566:  814:            if (c->stats.buffer == NULL) {
+    #####:  815:                out_of_memory(c, "SERVER_ERROR out of memory writing stats");
+        -:  816:            } else {
+     1566:  817:                write_and_free(c, c->stats.buffer, c->stats.offset);
+     1566:  818:                c->stats.buffer = NULL;
+        -:  819:            }
+        -:  820:        } else {
+    #####:  821:            out_string(c, "ERROR");
+        -:  822:        }
+     1566:  823:        return;
+        -:  824:    }
+        -:  825:
+        -:  826:    /* append terminator and start the transfer */
+     3789:  827:    append_stats(NULL, 0, NULL, 0, c);
+        -:  828:
+     3789:  829:    if (c->stats.buffer == NULL) {
+    #####:  830:        out_of_memory(c, "SERVER_ERROR out of memory writing stats");
+        -:  831:    } else {
+     3789:  832:        write_and_free(c, c->stats.buffer, c->stats.offset);
+     3789:  833:        c->stats.buffer = NULL;
+        -:  834:    }
+        -:  835:}
+        -:  836:
+        -:  837:// slow snprintf for debugging purposes.
+        2:  838:static void process_meta_command(conn *c, token_t *tokens, const size_t ntokens) {
+       2*:  839:    assert(c != NULL);
+        -:  840:
+        2:  841:    if (ntokens < 3 || tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####:  842:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####:  843:        return;
+        -:  844:    }
+        -:  845:
+        2:  846:    char *key = tokens[KEY_TOKEN].value;
+        2:  847:    size_t nkey = tokens[KEY_TOKEN].length;
+        -:  848:
+       2*:  849:    if (ntokens >= 4 && tokens[2].length == 1 && tokens[2].value[0] == 'b') {
+    #####:  850:        size_t ret = base64_decode((unsigned char *)key, nkey,
+        -:  851:                    (unsigned char *)key, nkey);
+    #####:  852:        if (ret == 0) {
+        -:  853:            // failed to decode.
+    #####:  854:            out_string(c, "CLIENT_ERROR bad command line format");
+    #####:  855:            return;
+        -:  856:        }
+        -:  857:        nkey = ret;
+        -:  858:    }
+        -:  859:
+        2:  860:    bool overflow; // not used here.
+        2:  861:    item *it = limited_get(key, nkey, c->thread, 0, false, DONT_UPDATE, &overflow);
+        2:  862:    if (it) {
+        1:  863:        mc_resp *resp = c->resp;
+        1:  864:        size_t total = 0;
+        1:  865:        size_t ret;
+        -:  866:        // similar to out_string().
+        1:  867:        memcpy(resp->wbuf, "ME ", 3);
+        1:  868:        total += 3;
+        1:  869:        if (it->it_flags & ITEM_KEY_BINARY) {
+        -:  870:            // re-encode from memory rather than copy the original key;
+        -:  871:            // to help give confidence that what in memory is what we asked
+        -:  872:            // for.
+    #####:  873:            total += base64_encode((unsigned char *) ITEM_key(it), it->nkey, (unsigned char *)resp->wbuf + total, WRITE_BUFFER_SIZE - total);
+        -:  874:        } else {
+        1:  875:            memcpy(resp->wbuf + total, ITEM_key(it), it->nkey);
+        1:  876:            total += it->nkey;
+        -:  877:        }
+        1:  878:        resp->wbuf[total] = ' ';
+        1:  879:        total++;
+        -:  880:
+       2*:  881:        ret = snprintf(resp->wbuf + total, WRITE_BUFFER_SIZE - (it->nkey + 12),
+        -:  882:                "exp=%d la=%llu cas=%llu fetch=%s cls=%u size=%lu\r\n",
+    #####:  883:                (it->exptime == 0) ? -1 : (it->exptime - current_time),
+        1:  884:                (unsigned long long)(current_time - it->time),
+        -:  885:                (unsigned long long)ITEM_get_cas(it),
+        -:  886:                (it->it_flags & ITEM_FETCHED) ? "yes" : "no",
+        1:  887:                ITEM_clsid(it),
+        1:  888:                (unsigned long) ITEM_ntotal(it));
+        -:  889:
+        1:  890:        item_remove(it);
+        1:  891:        resp->wbytes = total + ret;
+        1:  892:        resp_add_iov(resp, resp->wbuf, resp->wbytes);
+        1:  893:        conn_set_state(c, conn_new_cmd);
+        -:  894:    } else {
+        1:  895:        out_string(c, "EN");
+        -:  896:    }
+        2:  897:    pthread_mutex_lock(&c->thread->stats.mutex);
+        2:  898:    c->thread->stats.meta_cmds++;
+        2:  899:    pthread_mutex_unlock(&c->thread->stats.mutex);
+        -:  900:}
+        -:  901:
+        -:  902:#define MFLAG_MAX_OPT_LENGTH 20
+        -:  903:#define MFLAG_MAX_OPAQUE_LENGTH 32
+        -:  904:
+        -:  905:struct _meta_flags {
+        -:  906:    unsigned int has_error :1; // flipped if we found an error during parsing.
+        -:  907:    unsigned int no_update :1;
+        -:  908:    unsigned int locked :1;
+        -:  909:    unsigned int vivify :1;
+        -:  910:    unsigned int la :1;
+        -:  911:    unsigned int hit :1;
+        -:  912:    unsigned int value :1;
+        -:  913:    unsigned int set_stale :1;
+        -:  914:    unsigned int no_reply :1;
+        -:  915:    unsigned int has_cas :1;
+        -:  916:    unsigned int new_ttl :1;
+        -:  917:    unsigned int key_binary:1;
+        -:  918:    char mode; // single character mode switch, common to ms/ma
+        -:  919:    rel_time_t exptime;
+        -:  920:    rel_time_t autoviv_exptime;
+        -:  921:    rel_time_t recache_time;
+        -:  922:    client_flags_t client_flags;
+        -:  923:    uint64_t req_cas_id;
+        -:  924:    uint64_t delta; // ma
+        -:  925:    uint64_t initial; // ma
+        -:  926:};
+        -:  927:
+     1382:  928:static int _meta_flag_preparse(token_t *tokens, const size_t start,
+        -:  929:        struct _meta_flags *of, char **errstr) {
+     1382:  930:    unsigned int i;
+     1382:  931:    size_t ret;
+     1382:  932:    int32_t tmp_int;
+     1382:  933:    uint8_t seen[127] = {0};
+        -:  934:    // Start just past the key token. Look at first character of each token.
+     1641:  935:    for (i = start; tokens[i].length != 0; i++) {
+      260:  936:        uint8_t o = (uint8_t)tokens[i].value[0];
+        -:  937:        // zero out repeat flags so we don't over-parse for return data.
+      260:  938:        if (o >= 127 || seen[o] != 0) {
+    #####:  939:            *errstr = "CLIENT_ERROR duplicate flag";
+    #####:  940:            return -1;
+        -:  941:        }
+      260:  942:        seen[o] = 1;
+      260:  943:        switch (o) {
+        -:  944:            // base64 decode the key in-place, as the binary should always be
+        -:  945:            // shorter and the conversion code buffers bytes.
+        2:  946:            case 'b':
+        4:  947:                ret = base64_decode((unsigned char *)tokens[KEY_TOKEN].value, tokens[KEY_TOKEN].length,
+        2:  948:                            (unsigned char *)tokens[KEY_TOKEN].value, tokens[KEY_TOKEN].length);
+        2:  949:                if (ret == 0) {
+        -:  950:                    // Failed to decode
+    #####:  951:                    *errstr = "CLIENT_ERROR error decoding key";
+    #####:  952:                    of->has_error = 1;
+        -:  953:                }
+        2:  954:                tokens[KEY_TOKEN].length = ret;
+        2:  955:                of->key_binary = 1;
+        2:  956:                break;
+        -:  957:            /* Negative exptimes can underflow and end up immortal. realtime() will
+        -:  958:               immediately expire values that are greater than REALTIME_MAXDELTA, but less
+        -:  959:               than process_started, so lets aim for that. */
+       18:  960:            case 'N':
+       18:  961:                of->locked = 1;
+       18:  962:                of->vivify = 1;
+       18:  963:                if (!safe_strtol(tokens[i].value+1, &tmp_int)) {
+    #####:  964:                    *errstr = "CLIENT_ERROR bad token in command line format";
+    #####:  965:                    of->has_error = 1;
+        -:  966:                } else {
+       36:  967:                    of->autoviv_exptime = realtime(EXPTIME_TO_POSITIVE_TIME(tmp_int));
+        -:  968:                }
+        -:  969:                break;
+       29:  970:            case 'T':
+       29:  971:                of->locked = 1;
+       29:  972:                if (!safe_strtol(tokens[i].value+1, &tmp_int)) {
+    #####:  973:                    *errstr = "CLIENT_ERROR bad token in command line format";
+    #####:  974:                    of->has_error = 1;
+        -:  975:                } else {
+       58:  976:                    of->exptime = realtime(EXPTIME_TO_POSITIVE_TIME(tmp_int));
+       29:  977:                    of->new_ttl = true;
+        -:  978:                }
+        -:  979:                break;
+        2:  980:            case 'R':
+        2:  981:                of->locked = 1;
+        2:  982:                if (!safe_strtol(tokens[i].value+1, &tmp_int)) {
+    #####:  983:                    *errstr = "CLIENT_ERROR bad token in command line format";
+    #####:  984:                    of->has_error = 1;
+        -:  985:                } else {
+        4:  986:                    of->recache_time = realtime(EXPTIME_TO_POSITIVE_TIME(tmp_int));
+        -:  987:                }
+        -:  988:                break;
+        1:  989:            case 'l':
+        1:  990:                of->la = 1;
+        1:  991:                of->locked = 1; // need locked to delay LRU bump
+        1:  992:                break;
+        -:  993:            case 'O':
+        -:  994:            case 'P':
+        -:  995:            case 'L':
+        -:  996:                break;
+        -:  997:            case 'k': // known but no special handling
+        -:  998:            case 's':
+        -:  999:            case 't':
+        -: 1000:            case 'c':
+        -: 1001:            case 'f':
+        -: 1002:                break;
+       53: 1003:            case 'v':
+       53: 1004:                of->value = 1;
+       53: 1005:                break;
+        5: 1006:            case 'h':
+        5: 1007:                of->locked = 1; // need locked to delay LRU bump
+        5: 1008:                break;
+        2: 1009:            case 'u':
+        2: 1010:                of->no_update = 1;
+        2: 1011:                break;
+       10: 1012:            case 'q':
+       10: 1013:                of->no_reply = 1;
+       10: 1014:                break;
+        -: 1015:            // mset-related.
+        4: 1016:            case 'F':
+        4: 1017:                if (!safe_strtoflags(tokens[i].value+1, &of->client_flags)) {
+    #####: 1018:                    of->has_error = true;
+        -: 1019:                }
+        -: 1020:                break;
+       14: 1021:            case 'C': // mset, mdelete, marithmetic
+       14: 1022:                if (!safe_strtoull(tokens[i].value+1, &of->req_cas_id)) {
+    #####: 1023:                    *errstr = "CLIENT_ERROR bad token in command line format";
+    #####: 1024:                    of->has_error = true;
+        -: 1025:                } else {
+       14: 1026:                    of->has_cas = true;
+        -: 1027:                }
+        -: 1028:                break;
+       15: 1029:            case 'M': // mset and marithmetic mode switch
+       15: 1030:                if (tokens[i].length != 2) {
+    #####: 1031:                    *errstr = "CLIENT_ERROR incorrect length for M token";
+    #####: 1032:                    of->has_error = 1;
+        -: 1033:                } else {
+       15: 1034:                    of->mode = tokens[i].value[1];
+        -: 1035:                }
+        -: 1036:                break;
+        5: 1037:            case 'J': // marithmetic initial value
+        5: 1038:                if (!safe_strtoull(tokens[i].value+1, &of->initial)) {
+    #####: 1039:                    *errstr = "CLIENT_ERROR invalid numeric initial value";
+    #####: 1040:                    of->has_error = 1;
+        -: 1041:                }
+        -: 1042:                break;
+        5: 1043:            case 'D': // marithmetic delta value
+        5: 1044:                if (!safe_strtoull(tokens[i].value+1, &of->delta)) {
+    #####: 1045:                    *errstr = "CLIENT_ERROR invalid numeric delta value";
+    #####: 1046:                    of->has_error = 1;
+        -: 1047:                }
+        -: 1048:                break;
+        3: 1049:            case 'I':
+        3: 1050:                of->set_stale = 1;
+        3: 1051:                break;
+        1: 1052:            default: // unknown flag, bail.
+        1: 1053:                *errstr = "CLIENT_ERROR invalid flag";
+        1: 1054:                return -1;
+        -: 1055:        }
+        -: 1056:    }
+        -: 1057:
+     1381: 1058:    return of->has_error ? -1 : 0;
+        -: 1059:}
+        -: 1060:
+     1314: 1061:static void process_mget_command(conn *c, token_t *tokens, const size_t ntokens) {
+     1314: 1062:    char *key;
+     1314: 1063:    size_t nkey;
+     1314: 1064:    item *it;
+     1314: 1065:    unsigned int i = 0;
+     1314: 1066:    struct _meta_flags of = {0}; // option bitflags.
+     1314: 1067:    uint32_t hv; // cached hash value for unlocking an item.
+     1314: 1068:    bool failed = false;
+     1314: 1069:    bool item_created = false;
+     1314: 1070:    bool won_token = false;
+     1314: 1071:    bool ttl_set = false;
+     1314: 1072:    char *errstr = "CLIENT_ERROR bad command line format";
+    1314*: 1073:    assert(c != NULL);
+     1314: 1074:    mc_resp *resp = c->resp;
+     1314: 1075:    char *p = resp->wbuf;
+        -: 1076:
+    2628*: 1077:    WANT_TOKENS_MIN(ntokens, 3);
+        -: 1078:
+        -: 1079:    // FIXME: do we move this check to after preparse?
+     1314: 1080:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 1081:        out_errstring(c, "CLIENT_ERROR bad command line format");
+    #####: 1082:        return;
+        -: 1083:    }
+        -: 1084:
+        -: 1085:    // NOTE: final token has length == 0.
+        -: 1086:    // KEY_TOKEN == 1. 0 is command.
+        -: 1087:
+     1314: 1088:    if (ntokens > MFLAG_MAX_OPT_LENGTH) {
+        -: 1089:        // TODO: ensure the command tokenizer gives us at least this many
+    #####: 1090:        out_errstring(c, "CLIENT_ERROR options flags are too long");
+    #####: 1091:        return;
+        -: 1092:    }
+        -: 1093:
+        -: 1094:    // scrubs duplicated options and sets flags for how to load the item.
+        -: 1095:    // we pass in the first token that should be a flag.
+     1314: 1096:    if (_meta_flag_preparse(tokens, 2, &of, &errstr) != 0) {
+        1: 1097:        out_errstring(c, errstr);
+        1: 1098:        return;
+        -: 1099:    }
+     1313: 1100:    c->noreply = of.no_reply;
+        -: 1101:
+        -: 1102:    // Grab key and length after meta preparsing in case it was decoded.
+     1313: 1103:    key = tokens[KEY_TOKEN].value;
+     1313: 1104:    nkey = tokens[KEY_TOKEN].length;
+        -: 1105:
+        -: 1106:    // TODO: need to indicate if the item was overflowed or not?
+        -: 1107:    // I think we do, since an overflow shouldn't trigger an alloc/replace.
+     1313: 1108:    bool overflow = false;
+     1313: 1109:    if (!of.locked) {
+     1299: 1110:        it = limited_get(key, nkey, c->thread, 0, false, !of.no_update, &overflow);
+        -: 1111:    } else {
+        -: 1112:        // If we had to lock the item, we're doing our own bump later.
+       14: 1113:        it = limited_get_locked(key, nkey, c->thread, DONT_UPDATE, &hv, &overflow);
+        -: 1114:    }
+        -: 1115:
+        -: 1116:    // Since we're a new protocol, we can actually inform users that refcount
+        -: 1117:    // overflow is happening by straight up throwing an error.
+        -: 1118:    // We definitely don't want to re-autovivify by accident.
+     1313: 1119:    if (overflow) {
+    #####: 1120:        assert(it == NULL);
+    #####: 1121:        out_errstring(c, "SERVER_ERROR refcount overflow during fetch");
+    #####: 1122:        return;
+        -: 1123:    }
+        -: 1124:
+     1313: 1125:    if (it == NULL && of.vivify) {
+        -: 1126:        // Fill in the exptime during parsing later.
+        2: 1127:        it = item_alloc(key, nkey, 0, realtime(0), 2);
+        -: 1128:        // We don't actually need any of do_store_item's logic:
+        -: 1129:        // - already fetched and missed an existing item.
+        -: 1130:        // - lock is still held.
+        -: 1131:        // - not append/prepend/replace
+        -: 1132:        // - not testing CAS
+        2: 1133:        if (it != NULL) {
+        -: 1134:            // I look forward to the day I get rid of this :)
+        2: 1135:            memcpy(ITEM_data(it), "\r\n", 2);
+        -: 1136:            // NOTE: This initializes the CAS value.
+        2: 1137:            do_item_link(it, hv);
+        2: 1138:            item_created = true;
+        -: 1139:        }
+        -: 1140:    }
+        -: 1141:
+        -: 1142:    // don't have to check result of add_iov() since the iov size defaults are
+        -: 1143:    // enough.
+     1313: 1144:    if (it) {
+     1295: 1145:        if (of.value) {
+       26: 1146:            memcpy(p, "VA ", 3);
+       26: 1147:            p = itoa_u32(it->nbytes-2, p+3);
+        -: 1148:        } else {
+     1269: 1149:            memcpy(p, "HD", 2);
+     1269: 1150:            p += 2;
+        -: 1151:        }
+        -: 1152:
+     1416: 1153:        for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+      121: 1154:            switch (tokens[i].value[0]) {
+        1: 1155:                case 'T':
+        1: 1156:                    ttl_set = true;
+        1: 1157:                    it->exptime = of.exptime;
+        1: 1158:                    break;
+        7: 1159:                case 'N':
+        7: 1160:                    if (item_created) {
+        2: 1161:                        it->exptime = of.autoviv_exptime;
+        2: 1162:                        won_token = true;
+        -: 1163:                    }
+        -: 1164:                    break;
+        2: 1165:                case 'R':
+        -: 1166:                    // If we haven't autovivified and supplied token is less
+        -: 1167:                    // than current TTL, mark a win.
+        2: 1168:                    if ((it->it_flags & ITEM_TOKEN_SENT) == 0
+        1: 1169:                            && !item_created
+        1: 1170:                            && it->exptime != 0
+        1: 1171:                            && it->exptime < of.recache_time) {
+        1: 1172:                        won_token = true;
+        -: 1173:                    }
+        -: 1174:                    break;
+       32: 1175:                case 's':
+       32: 1176:                    META_CHAR(p, 's');
+       32: 1177:                    p = itoa_u32(it->nbytes-2, p);
+       32: 1178:                    break;
+       21: 1179:                case 't':
+        -: 1180:                    // TTL remaining as of this request.
+        -: 1181:                    // needs to be relative because server clocks may not be in sync.
+       21: 1182:                    META_CHAR(p, 't');
+       21: 1183:                    if (it->exptime == 0) {
+    #####: 1184:                        *p = '-';
+    #####: 1185:                        *(p+1) = '1';
+    #####: 1186:                        p += 2;
+        -: 1187:                    } else {
+       21: 1188:                        p = itoa_u32(it->exptime - current_time, p);
+        -: 1189:                    }
+        -: 1190:                    break;
+       11: 1191:                case 'c':
+       11: 1192:                    META_CHAR(p, 'c');
+       11: 1193:                    p = itoa_u64(ITEM_get_cas(it), p);
+       11: 1194:                    break;
+        4: 1195:                case 'f':
+        4: 1196:                    META_CHAR(p, 'f');
+        4: 1197:                    if (FLAGS_SIZE(it) == 0) {
+        1: 1198:                        *p = '0';
+        1: 1199:                        p++;
+        -: 1200:                    } else {
+        3: 1201:                        p = itoa_u64(*((client_flags_t *) ITEM_suffix(it)), p);
+        -: 1202:                    }
+        -: 1203:                    break;
+        1: 1204:                case 'l':
+        1: 1205:                    META_CHAR(p, 'l');
+        1: 1206:                    p = itoa_u32(current_time - it->time, p);
+        1: 1207:                    break;
+        5: 1208:                case 'h':
+        5: 1209:                    META_CHAR(p, 'h');
+        5: 1210:                    if (it->it_flags & ITEM_FETCHED) {
+        2: 1211:                        *p = '1';
+        -: 1212:                    } else {
+        3: 1213:                        *p = '0';
+        -: 1214:                    }
+        5: 1215:                    p++;
+        5: 1216:                    break;
+        2: 1217:                case 'O':
+        2: 1218:                    if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1219:                        errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1220:                        goto error;
+        -: 1221:                    }
+        2: 1222:                    META_SPACE(p);
+        2: 1223:                    memcpy(p, tokens[i].value, tokens[i].length);
+        2: 1224:                    p += tokens[i].length;
+        2: 1225:                    break;
+        3: 1226:                case 'k':
+        3: 1227:                    META_KEY(p, ITEM_key(it), it->nkey, (it->it_flags & ITEM_KEY_BINARY));
+        -: 1228:                    break;
+        -: 1229:            }
+      121: 1230:        }
+        -: 1231:
+        -: 1232:        // Has this item already sent a token?
+        -: 1233:        // Important to do this here so we don't send W with Z.
+        -: 1234:        // Isn't critical, but easier for client authors to understand.
+     1295: 1235:        if (it->it_flags & ITEM_TOKEN_SENT) {
+        3: 1236:            META_CHAR(p, 'Z');
+        -: 1237:        }
+     1295: 1238:        if (it->it_flags & ITEM_STALE) {
+        3: 1239:            META_CHAR(p, 'X');
+        -: 1240:            // FIXME: think hard about this. is this a default, or a flag?
+        3: 1241:            if ((it->it_flags & ITEM_TOKEN_SENT) == 0) {
+        -: 1242:                // If we're stale but no token already sent, now send one.
+        -: 1243:                won_token = true;
+        -: 1244:            }
+        -: 1245:        }
+        -: 1246:
+     1293: 1247:        if (won_token) {
+        -: 1248:            // Mark a win into the flag buffer.
+        5: 1249:            META_CHAR(p, 'W');
+        5: 1250:            it->it_flags |= ITEM_TOKEN_SENT;
+        -: 1251:        }
+        -: 1252:
+     1295: 1253:        *p = '\r';
+     1295: 1254:        *(p+1) = '\n';
+     1295: 1255:        *(p+2) = '\0';
+     1295: 1256:        p += 2;
+        -: 1257:        // finally, chain in the buffer.
+     1295: 1258:        resp_add_iov(resp, resp->wbuf, p - resp->wbuf);
+        -: 1259:
+     1295: 1260:        if (of.value) {
+        -: 1261:#ifdef EXTSTORE
+       26: 1262:            if (it->it_flags & ITEM_HDR) {
+        2: 1263:                if (storage_get_item(c, it, resp) != 0) {
+    #####: 1264:                    pthread_mutex_lock(&c->thread->stats.mutex);
+    #####: 1265:                    c->thread->stats.get_oom_extstore++;
+    #####: 1266:                    pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1267:
+    #####: 1268:                    failed = true;
+        -: 1269:                }
+       24: 1270:            } else if ((it->it_flags & ITEM_CHUNKED) == 0) {
+       24: 1271:                resp_add_iov(resp, ITEM_data(it), it->nbytes);
+        -: 1272:            } else {
+    #####: 1273:                resp_add_chunked_iov(resp, it, it->nbytes);
+        -: 1274:            }
+        -: 1275:#else
+        -: 1276:            if ((it->it_flags & ITEM_CHUNKED) == 0) {
+        -: 1277:                resp_add_iov(resp, ITEM_data(it), it->nbytes);
+        -: 1278:            } else {
+        -: 1279:                resp_add_chunked_iov(resp, it, it->nbytes);
+        -: 1280:            }
+        -: 1281:#endif
+        -: 1282:        }
+        -: 1283:
+        -: 1284:        // need to hold the ref at least because of the key above.
+        -: 1285:#ifdef EXTSTORE
+      24*: 1286:        if (!failed) {
+     1295: 1287:            if ((it->it_flags & ITEM_HDR) != 0 && of.value) {
+        -: 1288:                // Only have extstore clean if header and returning value.
+        2: 1289:                resp->item = NULL;
+        -: 1290:            } else {
+     1293: 1291:                resp->item = it;
+        -: 1292:            }
+        -: 1293:        } else {
+        -: 1294:            // Failed to set up extstore fetch.
+    #####: 1295:            if (of.locked) {
+    #####: 1296:                do_item_remove(it);
+        -: 1297:            } else {
+    #####: 1298:                item_remove(it);
+        -: 1299:            }
+        -: 1300:        }
+        -: 1301:#else
+        -: 1302:        resp->item = it;
+        -: 1303:#endif
+        -: 1304:    } else {
+        -: 1305:        failed = true;
+        -: 1306:    }
+        -: 1307:
+     1313: 1308:    if (of.locked) {
+        -: 1309:        // Delayed bump so we could get fetched/last access time pre-update.
+       14: 1310:        if (!of.no_update && it != NULL) {
+       12: 1311:            do_item_bump(c->thread, it, hv);
+        -: 1312:        }
+       14: 1313:        item_unlock(hv);
+        -: 1314:    }
+        -: 1315:
+        -: 1316:    // we count this command as a normal one if we've gotten this far.
+        -: 1317:    // TODO: for autovivify case, miss never happens. Is this okay?
+     1313: 1318:    if (!failed) {
+     1295: 1319:        pthread_mutex_lock(&c->thread->stats.mutex);
+     1295: 1320:        if (ttl_set) {
+        1: 1321:            c->thread->stats.touch_cmds++;
+        1: 1322:            c->thread->stats.slab_stats[ITEM_clsid(it)].touch_hits++;
+        -: 1323:        } else {
+     1294: 1324:            c->thread->stats.lru_hits[it->slabs_clsid]++;
+     1294: 1325:            c->thread->stats.get_cmds++;
+        -: 1326:        }
+     1295: 1327:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1328:
+     1295: 1329:        conn_set_state(c, conn_new_cmd);
+        -: 1330:    } else {
+       18: 1331:        pthread_mutex_lock(&c->thread->stats.mutex);
+       18: 1332:        if (ttl_set) {
+    #####: 1333:            c->thread->stats.touch_cmds++;
+    #####: 1334:            c->thread->stats.touch_misses++;
+        -: 1335:        } else {
+       18: 1336:            c->thread->stats.get_misses++;
+       18: 1337:            c->thread->stats.get_cmds++;
+        -: 1338:        }
+       18: 1339:        MEMCACHED_COMMAND_GET(c->sfd, key, nkey, -1, 0);
+       18: 1340:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1341:
+        -: 1342:        // This gets elided in noreply mode.
+       18: 1343:        if (c->noreply)
+        3: 1344:            resp->skip = true;
+       18: 1345:        memcpy(p, "EN", 2);
+       18: 1346:        p += 2;
+       41: 1347:        for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+       23: 1348:            switch (tokens[i].value[0]) {
+        -: 1349:                // TODO: macro perhaps?
+    #####: 1350:                case 'O':
+    #####: 1351:                    if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1352:                        errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1353:                        goto error;
+        -: 1354:                    }
+    #####: 1355:                    META_SPACE(p);
+    #####: 1356:                    memcpy(p, tokens[i].value, tokens[i].length);
+    #####: 1357:                    p += tokens[i].length;
+    #####: 1358:                    break;
+    #####: 1359:                case 'k':
+    #####: 1360:                    META_KEY(p, key, nkey, of.key_binary);
+        -: 1361:                    break;
+        -: 1362:            }
+       23: 1363:        }
+       18: 1364:        resp->wbytes = p - resp->wbuf;
+       18: 1365:        memcpy(resp->wbuf + resp->wbytes, "\r\n", 2);
+       18: 1366:        resp->wbytes += 2;
+       18: 1367:        resp_add_iov(resp, resp->wbuf, resp->wbytes);
+       18: 1368:        conn_set_state(c, conn_new_cmd);
+        -: 1369:    }
+        -: 1370:    return;
+    #####: 1371:error:
+    #####: 1372:    if (it) {
+    #####: 1373:        do_item_remove(it);
+    #####: 1374:        if (of.locked) {
+    #####: 1375:            item_unlock(hv);
+        -: 1376:        }
+        -: 1377:    }
+    #####: 1378:    out_errstring(c, errstr);
+        -: 1379:}
+        -: 1380:
+       45: 1381:static void process_mset_command(conn *c, token_t *tokens, const size_t ntokens) {
+       45: 1382:    char *key;
+       45: 1383:    size_t nkey;
+       45: 1384:    item *it;
+       45: 1385:    int i;
+       45: 1386:    short comm = NREAD_SET;
+       45: 1387:    struct _meta_flags of = {0}; // option bitflags.
+       45: 1388:    char *errstr = "CLIENT_ERROR bad command line format";
+       45: 1389:    uint32_t hv; // cached hash value.
+       45: 1390:    int vlen = 0; // value from data line.
+      45*: 1391:    assert(c != NULL);
+       45: 1392:    mc_resp *resp = c->resp;
+       45: 1393:    char *p = resp->wbuf;
+       45: 1394:    rel_time_t exptime = 0;
+        -: 1395:
+      89*: 1396:    WANT_TOKENS_MIN(ntokens, 3);
+        -: 1397:
+        -: 1398:    // TODO: most of this is identical to mget.
+       45: 1399:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 1400:        out_errstring(c, "CLIENT_ERROR bad command line format");
+    #####: 1401:        return;
+        -: 1402:    }
+        -: 1403:
+       45: 1404:    if (ntokens == 3) {
+        1: 1405:        out_errstring(c, "CLIENT_ERROR bad command line format");
+        1: 1406:        return;
+        -: 1407:    }
+        -: 1408:
+       44: 1409:    if (ntokens > MFLAG_MAX_OPT_LENGTH) {
+    #####: 1410:        out_errstring(c, "CLIENT_ERROR options flags too long");
+    #####: 1411:        return;
+        -: 1412:    }
+        -: 1413:
+        -: 1414:    // We note tokens into the front of the write buffer, so we can create the
+        -: 1415:    // final buffer in complete_nread_ascii.
+       44: 1416:    p = resp->wbuf;
+        -: 1417:
+       44: 1418:    if (!safe_strtol(tokens[KEY_TOKEN + 1].value, (int32_t*)&vlen)) {
+    #####: 1419:        out_errstring(c, "CLIENT_ERROR bad command line format");
+    #####: 1420:        return;
+        -: 1421:    }
+        -: 1422:
+       44: 1423:    if (vlen < 0 || vlen > (INT_MAX - 2)) {
+    #####: 1424:        out_errstring(c, "CLIENT_ERROR bad command line format");
+    #####: 1425:        return;
+        -: 1426:    }
+       44: 1427:    vlen += 2;
+        -: 1428:
+        -: 1429:    // We need to at least try to get the size to properly slurp bad bytes
+        -: 1430:    // after an error.
+        -: 1431:    // we pass in the first token that should be a flag.
+       44: 1432:    if (_meta_flag_preparse(tokens, 3, &of, &errstr) != 0) {
+    #####: 1433:        goto error;
+        -: 1434:    }
+        -: 1435:
+       44: 1436:    key = tokens[KEY_TOKEN].value;
+       44: 1437:    nkey = tokens[KEY_TOKEN].length;
+        -: 1438:
+        -: 1439:    // Set noreply after tokens are understood.
+       44: 1440:    c->noreply = of.no_reply;
+        -: 1441:    // Clear cas return value
+       44: 1442:    c->cas = 0;
+       44: 1443:    exptime = of.exptime;
+        -: 1444:
+       44: 1445:    bool has_error = false;
+      155: 1446:    for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+      111: 1447:        switch (tokens[i].value[0]) {
+        -: 1448:            // TODO: macro perhaps?
+        1: 1449:            case 'O':
+        1: 1450:                if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1451:                    errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1452:                    has_error = true;
+    #####: 1453:                    break;
+        -: 1454:                }
+        1: 1455:                META_SPACE(p);
+        1: 1456:                memcpy(p, tokens[i].value, tokens[i].length);
+        1: 1457:                p += tokens[i].length;
+        1: 1458:                break;
+        1: 1459:            case 'k':
+        1: 1460:                META_CHAR(p, 'k');
+        1: 1461:                break;
+        4: 1462:            case 'c':
+        -: 1463:                // need to set the cas value post-assignment.
+        4: 1464:                META_CHAR(p, 'c');
+        4: 1465:                break;
+        2: 1466:            case 's':
+        -: 1467:                // get the final size post-fill
+        2: 1468:                META_CHAR(p, 's');
+        2: 1469:                break;
+        -: 1470:        }
+      111: 1471:    }
+        -: 1472:
+        -: 1473:    // "mode switch" to alternative commands
+       44: 1474:    switch (of.mode) {
+        -: 1475:        case 0:
+        -: 1476:            break; // no mode supplied.
+        2: 1477:        case 'E': // Add...
+        2: 1478:            comm = NREAD_ADD;
+        2: 1479:            break;
+        6: 1480:        case 'A': // Append.
+        6: 1481:            if (of.vivify) {
+        2: 1482:                comm = NREAD_APPENDVIV;
+        2: 1483:                exptime = of.autoviv_exptime;
+        -: 1484:            } else {
+        -: 1485:                comm = NREAD_APPEND;
+        -: 1486:            }
+        -: 1487:            break;
+        1: 1488:        case 'P': // Prepend.
+        1: 1489:            if (of.vivify) {
+    #####: 1490:                comm = NREAD_PREPENDVIV;
+    #####: 1491:                exptime = of.autoviv_exptime;
+        -: 1492:            } else {
+        -: 1493:                comm = NREAD_PREPEND;
+        -: 1494:            }
+        -: 1495:            break;
+        2: 1496:        case 'R': // Replace.
+        2: 1497:            comm = NREAD_REPLACE;
+        2: 1498:            break;
+        -: 1499:        case 'S': // Set. Default.
+        -: 1500:            comm = NREAD_SET;
+        -: 1501:            break;
+        1: 1502:        default:
+        1: 1503:            errstr = "CLIENT_ERROR invalid mode for ms M token";
+        1: 1504:            goto error;
+        -: 1505:    }
+        -: 1506:
+        -: 1507:    // The item storage function doesn't exactly map to mset.
+        -: 1508:    // If a CAS value is supplied, upgrade default SET mode to CAS mode.
+        -: 1509:    // Also allows REPLACE to work, as REPLACE + CAS works the same as CAS.
+        -: 1510:    // add-with-cas works the same as add; but could only LRU bump if match..
+        -: 1511:    // APPEND/PREPEND allow a simplified CAS check.
+       43: 1512:    if (of.has_cas && (comm == NREAD_SET || comm == NREAD_REPLACE)) {
+        8: 1513:        comm = NREAD_CAS;
+        -: 1514:    }
+        -: 1515:
+        -: 1516:    // We attempt to process as much as we can in hopes of getting a valid and
+        -: 1517:    // adjusted vlen, or else the data swallowed after error will be for 0b.
+       43: 1518:    if (has_error)
+    #####: 1519:        goto error;
+        -: 1520:
+       43: 1521:    it = item_alloc(key, nkey, of.client_flags, exptime, vlen);
+        -: 1522:
+       43: 1523:    if (it == 0) {
+    #####: 1524:        enum store_item_type status;
+        -: 1525:        // TODO: These could be normalized codes (TL and OM). Need to
+        -: 1526:        // reorganize the output stuff a bit though.
+    #####: 1527:        if (! item_size_ok(nkey, of.client_flags, vlen)) {
+    #####: 1528:            errstr = "SERVER_ERROR object too large for cache";
+    #####: 1529:            status = TOO_LARGE;
+    #####: 1530:            pthread_mutex_lock(&c->thread->stats.mutex);
+    #####: 1531:            c->thread->stats.store_too_large++;
+    #####: 1532:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1533:        } else {
+    #####: 1534:            errstr = "SERVER_ERROR out of memory storing object";
+    #####: 1535:            status = NO_MEMORY;
+    #####: 1536:            pthread_mutex_lock(&c->thread->stats.mutex);
+    #####: 1537:            c->thread->stats.store_no_memory++;
+    #####: 1538:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1539:        }
+        -: 1540:        // FIXME: LOGGER_LOG specific to mset, include options.
+    #####: 1541:        LOGGER_LOG(c->thread->l, LOG_MUTATIONS, LOGGER_ITEM_STORE,
+        -: 1542:                NULL, status, comm, key, nkey, 0, 0);
+        -: 1543:
+        -: 1544:        /* Avoid stale data persisting in cache because we failed alloc. */
+        -: 1545:        // NOTE: only if SET mode?
+    #####: 1546:        it = item_get_locked(key, nkey, c->thread, DONT_UPDATE, &hv);
+    #####: 1547:        if (it) {
+    #####: 1548:            do_item_unlink(it, hv);
+    #####: 1549:            STORAGE_delete(c->thread->storage, it);
+    #####: 1550:            do_item_remove(it);
+        -: 1551:        }
+    #####: 1552:        item_unlock(hv);
+        -: 1553:
+    #####: 1554:        goto error;
+        -: 1555:    }
+       43: 1556:    ITEM_set_cas(it, of.req_cas_id);
+        -: 1557:
+       43: 1558:    c->item = it;
+        -: 1559:#ifdef NEED_ALIGN
+        -: 1560:    if (it->it_flags & ITEM_CHUNKED) {
+        -: 1561:        c->ritem = ITEM_schunk(it);
+        -: 1562:    } else {
+        -: 1563:        c->ritem = ITEM_data(it);
+        -: 1564:    }
+        -: 1565:#else
+       43: 1566:    c->ritem = ITEM_data(it);
+        -: 1567:#endif
+       43: 1568:    c->rlbytes = it->nbytes;
+       43: 1569:    c->cmd = comm;
+        -: 1570:
+        -: 1571:    // Prevent printing back the key in meta commands as garbage.
+       43: 1572:    if (of.key_binary) {
+        1: 1573:        it->it_flags |= ITEM_KEY_BINARY;
+        -: 1574:    }
+        -: 1575:
+       43: 1576:    if (of.set_stale && comm == NREAD_CAS) {
+        1: 1577:        c->set_stale = true;
+        -: 1578:    }
+       43: 1579:    resp->wbytes = p - resp->wbuf;
+        -: 1580:    // we don't set up the iov here, instead after complete_nread_ascii when
+        -: 1581:    // we have the full status code and item data.
+       43: 1582:    c->mset_res = true;
+       43: 1583:    conn_set_state(c, conn_nread);
+       43: 1584:    return;
+        1: 1585:error:
+        -: 1586:    /* swallow the data line */
+        1: 1587:    c->sbytes = vlen;
+        -: 1588:
+        -: 1589:    // Note: no errors possible after the item was successfully allocated.
+        -: 1590:    // So we're just looking at dumping error codes and returning.
+        1: 1591:    out_errstring(c, errstr);
+        -: 1592:    // TODO: pass state in? else switching twice meh.
+        1: 1593:    conn_set_state(c, conn_swallow);
+        -: 1594:}
+        -: 1595:
+        9: 1596:static void process_mdelete_command(conn *c, token_t *tokens, const size_t ntokens) {
+        9: 1597:    char *key;
+        9: 1598:    size_t nkey;
+        9: 1599:    item *it = NULL;
+        9: 1600:    int i;
+        9: 1601:    uint32_t hv;
+        9: 1602:    struct _meta_flags of = {0}; // option bitflags.
+        9: 1603:    char *errstr = "CLIENT_ERROR bad command line format";
+       9*: 1604:    assert(c != NULL);
+        9: 1605:    mc_resp *resp = c->resp;
+        -: 1606:    // reserve bytes for status code
+        9: 1607:    char *p = resp->wbuf + 2;
+        -: 1608:
+      18*: 1609:    WANT_TOKENS_MIN(ntokens, 3);
+        -: 1610:
+        -: 1611:    // TODO: most of this is identical to mget.
+        9: 1612:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 1613:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 1614:        return;
+        -: 1615:    }
+        -: 1616:
+        9: 1617:    if (ntokens > MFLAG_MAX_OPT_LENGTH) {
+    #####: 1618:        out_string(c, "CLIENT_ERROR options flags too long");
+    #####: 1619:        return;
+        -: 1620:    }
+        -: 1621:
+        -: 1622:    // scrubs duplicated options and sets flags for how to load the item.
+        -: 1623:    // we pass in the first token that should be a flag.
+        -: 1624:    // FIXME: not using the preparse errstr?
+        9: 1625:    if (_meta_flag_preparse(tokens, 2, &of, &errstr) != 0) {
+    #####: 1626:        out_errstring(c, "CLIENT_ERROR invalid or duplicate flag");
+    #####: 1627:        return;
+        -: 1628:    }
+        9: 1629:    assert(c != NULL);
+        9: 1630:    c->noreply = of.no_reply;
+        -: 1631:
+        9: 1632:    key = tokens[KEY_TOKEN].value;
+        9: 1633:    nkey = tokens[KEY_TOKEN].length;
+        -: 1634:
+       15: 1635:    for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+        6: 1636:        switch (tokens[i].value[0]) {
+        -: 1637:            // TODO: macro perhaps?
+    #####: 1638:            case 'O':
+    #####: 1639:                if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1640:                    errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1641:                    goto error;
+        -: 1642:                }
+    #####: 1643:                META_SPACE(p);
+    #####: 1644:                memcpy(p, tokens[i].value, tokens[i].length);
+    #####: 1645:                p += tokens[i].length;
+    #####: 1646:                break;
+    #####: 1647:            case 'k':
+    #####: 1648:                META_KEY(p, key, nkey, of.key_binary);
+        -: 1649:                break;
+        -: 1650:        }
+        6: 1651:    }
+        -: 1652:
+        9: 1653:    it = item_get_locked(key, nkey, c->thread, DONT_UPDATE, &hv);
+        9: 1654:    if (it) {
+        7: 1655:        MEMCACHED_COMMAND_DELETE(c->sfd, ITEM_key(it), it->nkey);
+        -: 1656:
+        -: 1657:        // allow only deleting/marking if a CAS value matches.
+        7: 1658:        if (of.has_cas && ITEM_get_cas(it) != of.req_cas_id) {
+        1: 1659:            pthread_mutex_lock(&c->thread->stats.mutex);
+        1: 1660:            c->thread->stats.delete_misses++;
+        1: 1661:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1662:
+        1: 1663:            memcpy(resp->wbuf, "EX", 2);
+        1: 1664:            goto cleanup;
+        -: 1665:        }
+        -: 1666:
+        -: 1667:        // If we're to set this item as stale, we don't actually want to
+        -: 1668:        // delete it. We mark the stale bit, bump CAS, and update exptime if
+        -: 1669:        // we were supplied a new TTL.
+        6: 1670:        if (of.set_stale) {
+        2: 1671:            if (of.new_ttl) {
+        1: 1672:                it->exptime = of.exptime;
+        -: 1673:            }
+        2: 1674:            it->it_flags |= ITEM_STALE;
+        -: 1675:            // Also need to remove TOKEN_SENT, so next client can win.
+        2: 1676:            it->it_flags &= ~ITEM_TOKEN_SENT;
+        -: 1677:
+        2: 1678:            ITEM_set_cas(it, (settings.use_cas) ? get_cas_id() : 0);
+        -: 1679:
+        -: 1680:            // Clients can noreply nominal responses.
+        2: 1681:            if (c->noreply)
+    #####: 1682:                resp->skip = true;
+        2: 1683:            memcpy(resp->wbuf, "HD", 2);
+        -: 1684:        } else {
+        4: 1685:            pthread_mutex_lock(&c->thread->stats.mutex);
+        4: 1686:            c->thread->stats.slab_stats[ITEM_clsid(it)].delete_hits++;
+        4: 1687:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1688:
+        4: 1689:            LOGGER_LOG(NULL, LOG_DELETIONS, LOGGER_DELETIONS, it, LOG_TYPE_META_DELETE);
+        4: 1690:            do_item_unlink(it, hv);
+        4: 1691:            STORAGE_delete(c->thread->storage, it);
+        4: 1692:            if (c->noreply)
+        1: 1693:                resp->skip = true;
+        4: 1694:            memcpy(resp->wbuf, "HD", 2);
+        -: 1695:        }
+        6: 1696:        goto cleanup;
+        -: 1697:    } else {
+        2: 1698:        pthread_mutex_lock(&c->thread->stats.mutex);
+        2: 1699:        c->thread->stats.delete_misses++;
+        2: 1700:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1701:
+        2: 1702:        memcpy(resp->wbuf, "NF", 2);
+        2: 1703:        goto cleanup;
+        -: 1704:    }
+        9: 1705:cleanup:
+        9: 1706:    if (it) {
+        7: 1707:        do_item_remove(it);
+        -: 1708:    }
+        -: 1709:    // Item is always returned locked, even if missing.
+        9: 1710:    item_unlock(hv);
+        9: 1711:    resp->wbytes = p - resp->wbuf;
+        9: 1712:    memcpy(resp->wbuf + resp->wbytes, "\r\n", 2);
+        9: 1713:    resp->wbytes += 2;
+        9: 1714:    resp_add_iov(resp, resp->wbuf, resp->wbytes);
+        9: 1715:    conn_set_state(c, conn_new_cmd);
+        9: 1716:    return;
+    #####: 1717:error:
+    #####: 1718:    out_errstring(c, errstr);
+        -: 1719:}
+        -: 1720:
+       15: 1721:static void process_marithmetic_command(conn *c, token_t *tokens, const size_t ntokens) {
+       15: 1722:    char *key;
+       15: 1723:    size_t nkey;
+       15: 1724:    int i;
+       15: 1725:    struct _meta_flags of = {0}; // option bitflags.
+       15: 1726:    char *errstr = "CLIENT_ERROR bad command line format";
+      15*: 1727:    assert(c != NULL);
+       15: 1728:    mc_resp *resp = c->resp;
+        -: 1729:    // no reservation (like del/set) since we post-process the status line.
+       15: 1730:    char *p = resp->wbuf;
+        -: 1731:
+        -: 1732:    // If no argument supplied, incr or decr by one.
+       15: 1733:    of.delta = 1;
+       15: 1734:    of.initial = 0; // redundant, for clarity.
+       15: 1735:    bool incr = true; // default mode is to increment.
+       15: 1736:    bool locked = false;
+       15: 1737:    uint32_t hv = 0;
+       15: 1738:    item *it = NULL; // item returned by do_add_delta.
+        -: 1739:
+      29*: 1740:    WANT_TOKENS_MIN(ntokens, 3);
+        -: 1741:
+        -: 1742:    // TODO: most of this is identical to mget.
+       15: 1743:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 1744:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 1745:        return;
+        -: 1746:    }
+        -: 1747:
+       15: 1748:    if (ntokens > MFLAG_MAX_OPT_LENGTH) {
+    #####: 1749:        out_string(c, "CLIENT_ERROR options flags too long");
+    #####: 1750:        return;
+        -: 1751:    }
+        -: 1752:
+        -: 1753:    // scrubs duplicated options and sets flags for how to load the item.
+        -: 1754:    // we pass in the first token that should be a flag.
+       15: 1755:    if (_meta_flag_preparse(tokens, 2, &of, &errstr) != 0) {
+    #####: 1756:        out_errstring(c, "CLIENT_ERROR invalid or duplicate flag");
+    #####: 1757:        return;
+        -: 1758:    }
+       15: 1759:    assert(c != NULL);
+       15: 1760:    c->noreply = of.no_reply;
+        -: 1761:
+       15: 1762:    key = tokens[KEY_TOKEN].value;
+       15: 1763:    nkey = tokens[KEY_TOKEN].length;
+        -: 1764:
+        -: 1765:    // "mode switch" to alternative commands
+       15: 1766:    switch (of.mode) {
+        -: 1767:        case 0: // no switch supplied.
+        -: 1768:            break;
+        -: 1769:        case 'I': // Incr (default)
+        -: 1770:        case '+':
+        -: 1771:            incr = true;
+        -: 1772:            break;
+        2: 1773:        case 'D': // Decr.
+        -: 1774:        case '-':
+        2: 1775:            incr = false;
+        2: 1776:            break;
+    #####: 1777:        default:
+    #####: 1778:            errstr = "CLIENT_ERROR invalid mode for ma M token";
+    #####: 1779:            goto error;
+       15: 1780:            break;
+        -: 1781:    }
+        -: 1782:
+        -: 1783:    // take hash value and manually lock item... hold lock during store phase
+        -: 1784:    // on miss and avoid recalculating the hash multiple times.
+       15: 1785:    hv = hash(key, nkey);
+       15: 1786:    item_lock(hv);
+       15: 1787:    locked = true;
+       15: 1788:    char tmpbuf[INCR_MAX_STORAGE_LEN];
+        -: 1789:
+        -: 1790:    // return a referenced item if it exists, so we can modify it here, rather
+        -: 1791:    // than adding even more parameters to do_add_delta.
+       15: 1792:    bool item_created = false;
+       15: 1793:    switch(do_add_delta(c->thread, key, nkey, incr, of.delta, tmpbuf, &of.req_cas_id, hv, &it)) {
+        8: 1794:    case OK:
+        8: 1795:        if (c->noreply)
+        1: 1796:            resp->skip = true;
+        -: 1797:        // *it was filled, set the status below.
+        -: 1798:        break;
+        1: 1799:    case NON_NUMERIC:
+        1: 1800:        errstr = "CLIENT_ERROR cannot increment or decrement non-numeric value";
+        1: 1801:        goto error;
+    #####: 1802:        break;
+    #####: 1803:    case EOM:
+    #####: 1804:        errstr = "SERVER_ERROR out of memory";
+    #####: 1805:        goto error;
+        5: 1806:        break;
+        5: 1807:    case DELTA_ITEM_NOT_FOUND:
+        5: 1808:        if (of.vivify) {
+        3: 1809:            itoa_u64(of.initial, tmpbuf);
+        3: 1810:            int vlen = strlen(tmpbuf);
+        -: 1811:
+        3: 1812:            it = item_alloc(key, nkey, 0, 0, vlen+2);
+        3: 1813:            if (it != NULL) {
+        3: 1814:                memcpy(ITEM_data(it), tmpbuf, vlen);
+        3: 1815:                memcpy(ITEM_data(it) + vlen, "\r\n", 2);
+        3: 1816:                if (do_store_item(it, NREAD_ADD, c->thread, hv, NULL, NULL, CAS_NO_STALE)) {
+        -: 1817:                    item_created = true;
+        -: 1818:                } else {
+        -: 1819:                    // Not sure how we can get here if we're holding the lock.
+    #####: 1820:                    memcpy(resp->wbuf, "NS", 2);
+        -: 1821:                }
+        -: 1822:            } else {
+    #####: 1823:                errstr = "SERVER_ERROR Out of memory allocating new item";
+    #####: 1824:                goto error;
+        -: 1825:            }
+        -: 1826:        } else {
+        2: 1827:            pthread_mutex_lock(&c->thread->stats.mutex);
+        2: 1828:            if (incr) {
+        2: 1829:                c->thread->stats.incr_misses++;
+        -: 1830:            } else {
+    #####: 1831:                c->thread->stats.decr_misses++;
+        -: 1832:            }
+        2: 1833:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 1834:            // won't have a valid it here.
+        2: 1835:            memcpy(p, "NF", 2);
+        2: 1836:            p += 2;
+        -: 1837:        }
+        -: 1838:        break;
+        -: 1839:    case DELTA_ITEM_CAS_MISMATCH:
+        -: 1840:        // also returns without a valid it.
+        1: 1841:        memcpy(p, "EX", 2);
+        1: 1842:        p += 2;
+        1: 1843:        break;
+        -: 1844:    }
+        -: 1845:
+        -: 1846:    // final loop
+        -: 1847:    // allows building the response with information after vivifying from a
+        -: 1848:    // miss, or returning a new CAS value after add_delta().
+       14: 1849:    if (it) {
+       11: 1850:        size_t vlen = strlen(tmpbuf);
+       11: 1851:        if (of.value) {
+        8: 1852:            memcpy(p, "VA ", 3);
+        8: 1853:            p = itoa_u32(vlen, p+3);
+        -: 1854:        } else {
+        3: 1855:            memcpy(p, "HD", 2);
+        3: 1856:            p += 2;
+        -: 1857:        }
+        -: 1858:
+       49: 1859:        for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+       38: 1860:            switch (tokens[i].value[0]) {
+        2: 1861:                case 'c':
+        2: 1862:                    META_CHAR(p, 'c');
+        2: 1863:                    p = itoa_u64(ITEM_get_cas(it), p);
+        2: 1864:                    break;
+        6: 1865:                case 't':
+        6: 1866:                    META_CHAR(p, 't');
+        6: 1867:                    if (it->exptime == 0) {
+        5: 1868:                        *p = '-';
+        5: 1869:                        *(p+1) = '1';
+        5: 1870:                        p += 2;
+        -: 1871:                    } else {
+        1: 1872:                        p = itoa_u32(it->exptime - current_time, p);
+        -: 1873:                    }
+        -: 1874:                    break;
+        1: 1875:                case 'T':
+        1: 1876:                    it->exptime = of.exptime;
+        1: 1877:                    break;
+        8: 1878:                case 'N':
+        8: 1879:                    if (item_created) {
+        3: 1880:                        it->exptime = of.autoviv_exptime;
+        -: 1881:                    }
+        -: 1882:                    break;
+        -: 1883:                // TODO: macro perhaps?
+    #####: 1884:                case 'O':
+    #####: 1885:                    if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1886:                        errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1887:                        goto error;
+        -: 1888:                    }
+    #####: 1889:                    META_SPACE(p);
+    #####: 1890:                    memcpy(p, tokens[i].value, tokens[i].length);
+    #####: 1891:                    p += tokens[i].length;
+    #####: 1892:                    break;
+    #####: 1893:                case 'k':
+    #####: 1894:                    META_KEY(p, key, nkey, of.key_binary);
+        -: 1895:                    break;
+        -: 1896:            }
+       38: 1897:        }
+        -: 1898:
+       11: 1899:        if (of.value) {
+        8: 1900:            *p = '\r';
+        8: 1901:            *(p+1) = '\n';
+        8: 1902:            p += 2;
+        8: 1903:            memcpy(p, tmpbuf, vlen);
+        8: 1904:            p += vlen;
+        -: 1905:        }
+        -: 1906:
+       11: 1907:        do_item_remove(it);
+        -: 1908:    } else {
+        -: 1909:        // No item to handle. still need to return opaque/key tokens
+        7: 1910:        for (i = KEY_TOKEN+1; i < ntokens-1; i++) {
+        4: 1911:            switch (tokens[i].value[0]) {
+        -: 1912:                // TODO: macro perhaps?
+    #####: 1913:                case 'O':
+    #####: 1914:                    if (tokens[i].length > MFLAG_MAX_OPAQUE_LENGTH) {
+    #####: 1915:                        errstr = "CLIENT_ERROR opaque token too long";
+    #####: 1916:                        goto error;
+        -: 1917:                    }
+    #####: 1918:                    META_SPACE(p);
+    #####: 1919:                    memcpy(p, tokens[i].value, tokens[i].length);
+    #####: 1920:                    p += tokens[i].length;
+    #####: 1921:                    break;
+    #####: 1922:                case 'k':
+    #####: 1923:                    META_KEY(p, key, nkey, of.key_binary);
+        -: 1924:                    break;
+        -: 1925:            }
+        4: 1926:        }
+        -: 1927:    }
+        -: 1928:
+       14: 1929:    item_unlock(hv);
+        -: 1930:
+       14: 1931:    resp->wbytes = p - resp->wbuf;
+       14: 1932:    memcpy(resp->wbuf + resp->wbytes, "\r\n", 2);
+       14: 1933:    resp->wbytes += 2;
+       14: 1934:    resp_add_iov(resp, resp->wbuf, resp->wbytes);
+       14: 1935:    conn_set_state(c, conn_new_cmd);
+       14: 1936:    return;
+        1: 1937:error:
+        1: 1938:    if (it != NULL)
+    #####: 1939:        do_item_remove(it);
+        1: 1940:    if (locked)
+        1: 1941:        item_unlock(hv);
+        1: 1942:    out_errstring(c, errstr);
+        -: 1943:}
+        -: 1944:
+        -: 1945:
+   302958: 1946:static void process_update_command(conn *c, token_t *tokens, const size_t ntokens, int comm, bool handle_cas) {
+   302958: 1947:    char *key;
+   302958: 1948:    size_t nkey;
+   302958: 1949:    client_flags_t flags;
+   302958: 1950:    int32_t exptime_int = 0;
+   302958: 1951:    rel_time_t exptime = 0;
+   302958: 1952:    int vlen;
+   302958: 1953:    uint64_t req_cas_id=0;
+   302958: 1954:    item *it;
+        -: 1955:
+  302958*: 1956:    assert(c != NULL);
+        -: 1957:
+   302958: 1958:    set_noreply_maybe(c, tokens, ntokens);
+        -: 1959:
+   302958: 1960:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 1961:        out_string(c, "CLIENT_ERROR bad command line format");
+      16*: 1962:        return;
+        -: 1963:    }
+        -: 1964:
+   302958: 1965:    key = tokens[KEY_TOKEN].value;
+   302958: 1966:    nkey = tokens[KEY_TOKEN].length;
+        -: 1967:
+   605914: 1968:    if (! (safe_strtoflags(tokens[2].value, &flags)
+   302957: 1969:           && safe_strtol(tokens[3].value, &exptime_int)
+   302956: 1970:           && safe_strtol(tokens[4].value, (int32_t *)&vlen))) {
+        3: 1971:        out_string(c, "CLIENT_ERROR bad command line format");
+        3: 1972:        return;
+        -: 1973:    }
+        -: 1974:
+   605909: 1975:    exptime = realtime(EXPTIME_TO_POSITIVE_TIME(exptime_int));
+        -: 1976:
+        -: 1977:    // does cas value exist?
+   302955: 1978:    if (handle_cas) {
+       13: 1979:        if (!safe_strtoull(tokens[5].value, &req_cas_id)) {
+        1: 1980:            out_string(c, "CLIENT_ERROR bad command line format");
+        1: 1981:            return;
+        -: 1982:        }
+        -: 1983:    }
+        -: 1984:
+   302954: 1985:    if (vlen < 0 || vlen > (INT_MAX - 2)) {
+        3: 1986:        out_string(c, "CLIENT_ERROR bad command line format");
+        3: 1987:        return;
+        -: 1988:    }
+   302951: 1989:    vlen += 2;
+        -: 1990:
+   302951: 1991:    if (settings.detail_enabled) {
+      101: 1992:        stats_prefix_record_set(key, nkey);
+        -: 1993:    }
+        -: 1994:
+   302951: 1995:    it = item_alloc(key, nkey, flags, exptime, vlen);
+        -: 1996:
+   302951: 1997:    if (it == 0) {
+        9: 1998:        enum store_item_type status;
+        9: 1999:        if (! item_size_ok(nkey, flags, vlen)) {
+        4: 2000:            out_string(c, "SERVER_ERROR object too large for cache");
+        4: 2001:            status = TOO_LARGE;
+        4: 2002:            pthread_mutex_lock(&c->thread->stats.mutex);
+        4: 2003:            c->thread->stats.store_too_large++;
+        4: 2004:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2005:        } else {
+        5: 2006:            out_of_memory(c, "SERVER_ERROR out of memory storing object");
+        5: 2007:            status = NO_MEMORY;
+        5: 2008:            pthread_mutex_lock(&c->thread->stats.mutex);
+        5: 2009:            c->thread->stats.store_no_memory++;
+        5: 2010:            pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2011:        }
+       9*: 2012:        LOGGER_LOG(c->thread->l, LOG_MUTATIONS, LOGGER_ITEM_STORE,
+        -: 2013:                NULL, status, comm, key, nkey, 0, 0, c->sfd);
+        -: 2014:        /* swallow the data line */
+        9: 2015:        conn_set_state(c, conn_swallow);
+        9: 2016:        c->sbytes = vlen;
+        -: 2017:
+        -: 2018:        /* Avoid stale data persisting in cache because we failed alloc.
+        -: 2019:         * Unacceptable for SET. Anywhere else too? */
+        9: 2020:        if (comm == NREAD_SET) {
+        9: 2021:            it = item_get(key, nkey, c->thread, DONT_UPDATE);
+        9: 2022:            if (it) {
+        2: 2023:                item_unlink(it);
+        2: 2024:                STORAGE_delete(c->thread->storage, it);
+        2: 2025:                item_remove(it);
+        -: 2026:            }
+        -: 2027:        }
+        -: 2028:
+        9: 2029:        return;
+        -: 2030:    }
+   302942: 2031:    ITEM_set_cas(it, req_cas_id);
+        -: 2032:
+   302942: 2033:    c->item = it;
+        -: 2034:#ifdef NEED_ALIGN
+        -: 2035:    if (it->it_flags & ITEM_CHUNKED) {
+        -: 2036:        c->ritem = ITEM_schunk(it);
+        -: 2037:    } else {
+        -: 2038:        c->ritem = ITEM_data(it);
+        -: 2039:    }
+        -: 2040:#else
+   302942: 2041:    c->ritem = ITEM_data(it);
+        -: 2042:#endif
+   302942: 2043:    c->rlbytes = it->nbytes;
+   302942: 2044:    c->cmd = comm;
+   302942: 2045:    conn_set_state(c, conn_nread);
+        -: 2046:}
+        -: 2047:
+     2004: 2048:static void process_touch_command(conn *c, token_t *tokens, const size_t ntokens) {
+     2004: 2049:    char *key;
+     2004: 2050:    size_t nkey;
+     2004: 2051:    int32_t exptime_int = 0;
+     2004: 2052:    rel_time_t exptime = 0;
+     2004: 2053:    item *it;
+        -: 2054:
+    2004*: 2055:    assert(c != NULL);
+        -: 2056:
+     2004: 2057:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2058:
+     2004: 2059:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 2060:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 2061:        return;
+        -: 2062:    }
+        -: 2063:
+     2004: 2064:    key = tokens[KEY_TOKEN].value;
+     2004: 2065:    nkey = tokens[KEY_TOKEN].length;
+        -: 2066:
+     2004: 2067:    if (!safe_strtol(tokens[2].value, &exptime_int)) {
+    #####: 2068:        out_string(c, "CLIENT_ERROR invalid exptime argument");
+    #####: 2069:        return;
+        -: 2070:    }
+        -: 2071:
+     4007: 2072:    exptime = realtime(EXPTIME_TO_POSITIVE_TIME(exptime_int));
+     2004: 2073:    it = item_touch(key, nkey, exptime, c->thread);
+     2004: 2074:    if (it) {
+     2004: 2075:        pthread_mutex_lock(&c->thread->stats.mutex);
+     2004: 2076:        c->thread->stats.touch_cmds++;
+     2004: 2077:        c->thread->stats.slab_stats[ITEM_clsid(it)].touch_hits++;
+     2004: 2078:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2079:
+     2004: 2080:        out_string(c, "TOUCHED");
+     2004: 2081:        item_remove(it);
+        -: 2082:    } else {
+    #####: 2083:        pthread_mutex_lock(&c->thread->stats.mutex);
+    #####: 2084:        c->thread->stats.touch_cmds++;
+    #####: 2085:        c->thread->stats.touch_misses++;
+    #####: 2086:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2087:
+    #####: 2088:        out_string(c, "NOT_FOUND");
+        -: 2089:    }
+        -: 2090:}
+        -: 2091:
+      273: 2092:static void process_arithmetic_command(conn *c, token_t *tokens, const size_t ntokens, const bool incr) {
+      273: 2093:    char temp[INCR_MAX_STORAGE_LEN];
+      273: 2094:    uint64_t delta;
+      273: 2095:    char *key;
+      273: 2096:    size_t nkey;
+        -: 2097:
+     273*: 2098:    assert(c != NULL);
+        -: 2099:
+      273: 2100:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2101:
+      273: 2102:    if (tokens[KEY_TOKEN].length > KEY_MAX_LENGTH) {
+    #####: 2103:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 2104:        return;
+        -: 2105:    }
+        -: 2106:
+      273: 2107:    key = tokens[KEY_TOKEN].value;
+      273: 2108:    nkey = tokens[KEY_TOKEN].length;
+        -: 2109:
+      273: 2110:    if (!safe_strtoull(tokens[2].value, &delta)) {
+    #####: 2111:        out_string(c, "CLIENT_ERROR invalid numeric delta argument");
+    #####: 2112:        return;
+        -: 2113:    }
+        -: 2114:
+      273: 2115:    switch(add_delta(c->thread, key, nkey, incr, delta, temp, NULL)) {
+      267: 2116:    case OK:
+      267: 2117:        out_string(c, temp);
+      267: 2118:        break;
+        2: 2119:    case NON_NUMERIC:
+        2: 2120:        out_string(c, "CLIENT_ERROR cannot increment or decrement non-numeric value");
+        2: 2121:        break;
+    #####: 2122:    case EOM:
+    #####: 2123:        out_of_memory(c, "SERVER_ERROR out of memory");
+    #####: 2124:        break;
+        4: 2125:    case DELTA_ITEM_NOT_FOUND:
+        4: 2126:        pthread_mutex_lock(&c->thread->stats.mutex);
+        4: 2127:        if (incr) {
+        1: 2128:            c->thread->stats.incr_misses++;
+        -: 2129:        } else {
+        3: 2130:            c->thread->stats.decr_misses++;
+        -: 2131:        }
+        4: 2132:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2133:
+        4: 2134:        out_string(c, "NOT_FOUND");
+        4: 2135:        break;
+        -: 2136:    case DELTA_ITEM_CAS_MISMATCH:
+        -: 2137:        break; /* Should never get here */
+        -: 2138:    }
+      273: 2139:}
+        -: 2140:
+        -: 2141:
+   141147: 2142:static void process_delete_command(conn *c, token_t *tokens, const size_t ntokens) {
+   141147: 2143:    char *key;
+   141147: 2144:    size_t nkey;
+   141147: 2145:    item *it;
+   141147: 2146:    uint32_t hv;
+        -: 2147:
+  141147*: 2148:    assert(c != NULL);
+        -: 2149:
+   141147: 2150:    if (ntokens > 3) {
+     9852: 2151:        bool hold_is_zero = strcmp(tokens[KEY_TOKEN+1].value, "0") == 0;
+     9852: 2152:        bool sets_noreply = set_noreply_maybe(c, tokens, ntokens);
+     9850: 2153:        bool valid = (ntokens == 4 && (hold_is_zero || sets_noreply))
+     9853: 2154:            || (ntokens == 5 && hold_is_zero && sets_noreply);
+     9852: 2155:        if (!valid) {
+        2: 2156:            out_string(c, "CLIENT_ERROR bad command line format.  "
+        -: 2157:                       "Usage: delete <key> [noreply]");
+        4: 2158:            return;
+        -: 2159:        }
+        -: 2160:    }
+        -: 2161:
+        -: 2162:
+   141145: 2163:    key = tokens[KEY_TOKEN].value;
+   141145: 2164:    nkey = tokens[KEY_TOKEN].length;
+        -: 2165:
+   141145: 2166:    if(nkey > KEY_MAX_LENGTH) {
+    #####: 2167:        out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 2168:        return;
+        -: 2169:    }
+        -: 2170:
+   141145: 2171:    if (settings.detail_enabled) {
+        1: 2172:        stats_prefix_record_delete(key, nkey);
+        -: 2173:    }
+        -: 2174:
+   141145: 2175:    it = item_get_locked(key, nkey, c->thread, DONT_UPDATE, &hv);
+   141145: 2176:    if (it) {
+   141137: 2177:        MEMCACHED_COMMAND_DELETE(c->sfd, ITEM_key(it), it->nkey);
+        -: 2178:
+   141137: 2179:        pthread_mutex_lock(&c->thread->stats.mutex);
+   141137: 2180:        c->thread->stats.slab_stats[ITEM_clsid(it)].delete_hits++;
+   141137: 2181:        pthread_mutex_unlock(&c->thread->stats.mutex);
+   141137: 2182:        LOGGER_LOG(NULL, LOG_DELETIONS, LOGGER_DELETIONS, it, LOG_TYPE_DELETE);
+   141137: 2183:        do_item_unlink(it, hv);
+   141137: 2184:        STORAGE_delete(c->thread->storage, it);
+   141137: 2185:        do_item_remove(it);      /* release our reference */
+   141137: 2186:        out_string(c, "DELETED");
+        -: 2187:    } else {
+        8: 2188:        pthread_mutex_lock(&c->thread->stats.mutex);
+        8: 2189:        c->thread->stats.delete_misses++;
+        8: 2190:        pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2191:
+        8: 2192:        out_string(c, "NOT_FOUND");
+        -: 2193:    }
+   141145: 2194:    item_unlock(hv);
+        -: 2195:}
+        -: 2196:
+        2: 2197:static void process_verbosity_command(conn *c, token_t *tokens, const size_t ntokens) {
+        2: 2198:    unsigned int level;
+        -: 2199:
+       2*: 2200:    assert(c != NULL);
+        -: 2201:
+        2: 2202:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2203:
+        2: 2204:    if (!safe_strtoul(tokens[1].value, (uint32_t*)&level)) {
+        1: 2205:        out_string(c, "CLIENT_ERROR bad command line format");
+        1: 2206:        return;
+        -: 2207:    }
+        1: 2208:    settings.verbose = level > MAX_VERBOSITY_LEVEL ? MAX_VERBOSITY_LEVEL : level;
+        1: 2209:    out_string(c, "OK");
+        1: 2210:    return;
+        -: 2211:}
+        -: 2212:
+        -: 2213:#ifdef MEMCACHED_DEBUG
+    #####: 2214:static void process_misbehave_command(conn *c) {
+    #####: 2215:    int allowed = 0;
+        -: 2216:
+        -: 2217:    // try opening new TCP socket
+    #####: 2218:    int i = socket(AF_INET, SOCK_STREAM, 0);
+    #####: 2219:    if (i != -1) {
+    #####: 2220:        allowed++;
+    #####: 2221:        close(i);
+        -: 2222:    }
+        -: 2223:
+        -: 2224:    // try executing new commands
+    #####: 2225:    i = system("sleep 0");
+    #####: 2226:    if (i != -1) {
+    #####: 2227:        allowed++;
+        -: 2228:    }
+        -: 2229:
+    #####: 2230:    if (allowed) {
+    #####: 2231:        out_string(c, "ERROR");
+        -: 2232:    } else {
+    #####: 2233:        out_string(c, "OK");
+        -: 2234:    }
+    #####: 2235:}
+        -: 2236:
+        -: 2237:static void process_debugtime_command(conn *c, token_t *tokens, const size_t ntokens) {
+        -: 2238:    if (strcmp(tokens[1].value, "p") == 0) {
+        -: 2239:        if (!is_paused) {
+        -: 2240:            is_paused = true;
+        -: 2241:        }
+        -: 2242:    } else if (strcmp(tokens[1].value, "r") == 0) {
+        -: 2243:        if (is_paused) {
+        -: 2244:            is_paused = false;
+        -: 2245:        }
+        -: 2246:    } else {
+        -: 2247:        int64_t time_delta = 0;
+        -: 2248:        if (!safe_strtoll(tokens[1].value, &time_delta)) {
+        -: 2249:            out_string(c, "ERROR");
+        -: 2250:            return;
+        -: 2251:        }
+        -: 2252:        delta += time_delta;
+        -: 2253:        current_time += delta;
+        -: 2254:    }
+        -: 2255:    out_string(c, "OK");
+        -: 2256:}
+        -: 2257:#endif
+        -: 2258:
+        2: 2259:static void process_slabs_automove_command(conn *c, token_t *tokens, const size_t ntokens) {
+        2: 2260:    unsigned int level;
+        2: 2261:    double ratio;
+        -: 2262:
+       2*: 2263:    assert(c != NULL);
+        -: 2264:
+        2: 2265:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2266:
+        2: 2267:    if (strcmp(tokens[2].value, "ratio") == 0) {
+    #####: 2268:        if (ntokens < 5 || !safe_strtod(tokens[3].value, &ratio)) {
+    #####: 2269:            out_string(c, "ERROR");
+    #####: 2270:            return;
+        -: 2271:        }
+    #####: 2272:        settings.slab_automove_ratio = ratio;
+        -: 2273:    } else {
+        2: 2274:        if (!safe_strtoul(tokens[2].value, (uint32_t*)&level)) {
+        1: 2275:            out_string(c, "CLIENT_ERROR bad command line format");
+        1: 2276:            return;
+        -: 2277:        }
+        1: 2278:        if (level == 0) {
+        1: 2279:            settings.slab_automove = 0;
+    #####: 2280:        } else if (level == 1 || level == 2) {
+    #####: 2281:            settings.slab_automove = level;
+        -: 2282:        } else {
+    #####: 2283:            out_string(c, "ERROR");
+    #####: 2284:            return;
+        -: 2285:        }
+        -: 2286:    }
+        1: 2287:    out_string(c, "OK");
+        1: 2288:    return;
+        -: 2289:}
+        -: 2290:
+        -: 2291:/* TODO: decide on syntax for sampling? */
+       12: 2292:static void process_watch_command(conn *c, token_t *tokens, const size_t ntokens) {
+       12: 2293:    uint16_t f = 0;
+       12: 2294:    int x;
+      12*: 2295:    assert(c != NULL);
+        -: 2296:
+       12: 2297:    set_noreply_maybe(c, tokens, ntokens);
+       12: 2298:    if (!settings.watch_enabled) {
+        1: 2299:        out_string(c, "CLIENT_ERROR watch commands not allowed");
+        1: 2300:        return;
+        -: 2301:    }
+        -: 2302:
+       11: 2303:    if (resp_has_stack(c)) {
+    #####: 2304:        out_string(c, "ERROR cannot pipeline other commands before watch");
+    #####: 2305:        return;
+        -: 2306:    }
+        -: 2307:
+       11: 2308:    if (ntokens > 2) {
+       24: 2309:        for (x = COMMAND_TOKEN + 1; x < ntokens - 1; x++) {
+       14: 2310:            if ((strcmp(tokens[x].value, "rawcmds") == 0)) {
+    #####: 2311:                f |= LOG_RAWCMDS;
+       14: 2312:            } else if ((strcmp(tokens[x].value, "evictions") == 0)) {
+        2: 2313:                f |= LOG_EVICTIONS;
+       12: 2314:            } else if ((strcmp(tokens[x].value, "fetchers") == 0)) {
+        5: 2315:                f |= LOG_FETCHERS;
+        7: 2316:            } else if ((strcmp(tokens[x].value, "mutations") == 0)) {
+        5: 2317:                f |= LOG_MUTATIONS;
+        2: 2318:            } else if ((strcmp(tokens[x].value, "sysevents") == 0)) {
+    #####: 2319:                f |= LOG_SYSEVENTS;
+        2: 2320:            } else if ((strcmp(tokens[x].value, "connevents") == 0)) {
+        1: 2321:                f |= LOG_CONNEVENTS;
+        1: 2322:            } else if ((strcmp(tokens[x].value, "proxyreqs") == 0)) {
+    #####: 2323:                f |= LOG_PROXYREQS;
+        1: 2324:            } else if ((strcmp(tokens[x].value, "proxyevents") == 0)) {
+    #####: 2325:                f |= LOG_PROXYEVENTS;
+        1: 2326:            } else if ((strcmp(tokens[x].value, "proxyuser") == 0)) {
+    #####: 2327:                f |= LOG_PROXYUSER;
+        1: 2328:            } else if ((strcmp(tokens[x].value, "deletions") == 0)) {
+        1: 2329:                f |= LOG_DELETIONS;
+        -: 2330:            } else {
+    #####: 2331:                out_string(c, "ERROR");
+    #####: 2332:                return;
+        -: 2333:            }
+        -: 2334:        }
+        -: 2335:    } else {
+        -: 2336:        f |= LOG_FETCHERS;
+        -: 2337:    }
+        -: 2338:
+       11: 2339:    switch(logger_add_watcher(c, c->sfd, f)) {
+    #####: 2340:        case LOGGER_ADD_WATCHER_TOO_MANY:
+    #####: 2341:            out_string(c, "WATCHER_TOO_MANY log watcher limit reached");
+    #####: 2342:            break;
+    #####: 2343:        case LOGGER_ADD_WATCHER_FAILED:
+    #####: 2344:            out_string(c, "WATCHER_FAILED failed to add log watcher");
+    #####: 2345:            break;
+       11: 2346:        case LOGGER_ADD_WATCHER_OK:
+       11: 2347:            conn_set_state(c, conn_watch);
+       11: 2348:            event_del(&c->event);
+       11: 2349:            break;
+        -: 2350:    }
+       12: 2351:}
+        -: 2352:
+        3: 2353:static void process_memlimit_command(conn *c, token_t *tokens, const size_t ntokens) {
+        3: 2354:    uint32_t memlimit;
+       3*: 2355:    assert(c != NULL);
+        -: 2356:
+        3: 2357:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2358:
+        3: 2359:    if (!safe_strtoul(tokens[1].value, &memlimit)) {
+    #####: 2360:        out_string(c, "ERROR");
+        -: 2361:    } else {
+        3: 2362:        if (memlimit < 8) {
+    #####: 2363:            out_string(c, "MEMLIMIT_TOO_SMALL cannot set maxbytes to less than 8m");
+        -: 2364:        } else {
+        3: 2365:            if (memlimit > 1000000000) {
+    #####: 2366:                out_string(c, "MEMLIMIT_ADJUST_FAILED input value is megabytes not bytes");
+        3: 2367:            } else if (slabs_adjust_mem_limit((size_t) memlimit * 1024 * 1024)) {
+        3: 2368:                if (settings.verbose > 0) {
+    #####: 2369:                    fprintf(stderr, "maxbytes adjusted to %llum\n", (unsigned long long)memlimit);
+        -: 2370:                }
+        -: 2371:
+        3: 2372:                out_string(c, "OK");
+        -: 2373:            } else {
+    #####: 2374:                out_string(c, "MEMLIMIT_ADJUST_FAILED out of bounds or unable to adjust");
+        -: 2375:            }
+        -: 2376:        }
+        -: 2377:    }
+        3: 2378:}
+        -: 2379:
+    #####: 2380:static void process_lru_command(conn *c, token_t *tokens, const size_t ntokens) {
+    #####: 2381:    uint32_t pct_hot;
+    #####: 2382:    uint32_t pct_warm;
+    #####: 2383:    double hot_factor;
+    #####: 2384:    int32_t ttl;
+    #####: 2385:    double factor;
+        -: 2386:
+    #####: 2387:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2388:
+    #####: 2389:    if (strcmp(tokens[1].value, "tune") == 0 && ntokens >= 7) {
+    #####: 2390:        if (!safe_strtoul(tokens[2].value, &pct_hot) ||
+    #####: 2391:            !safe_strtoul(tokens[3].value, &pct_warm) ||
+    #####: 2392:            !safe_strtod(tokens[4].value, &hot_factor) ||
+    #####: 2393:            !safe_strtod(tokens[5].value, &factor)) {
+    #####: 2394:            out_string(c, "ERROR");
+        -: 2395:        } else {
+    #####: 2396:            if (pct_hot + pct_warm > 80) {
+    #####: 2397:                out_string(c, "ERROR hot and warm pcts must not exceed 80");
+    #####: 2398:            } else if (factor <= 0 || hot_factor <= 0) {
+    #####: 2399:                out_string(c, "ERROR hot/warm age factors must be greater than 0");
+        -: 2400:            } else {
+    #####: 2401:                settings.hot_lru_pct = pct_hot;
+    #####: 2402:                settings.warm_lru_pct = pct_warm;
+    #####: 2403:                settings.hot_max_factor = hot_factor;
+    #####: 2404:                settings.warm_max_factor = factor;
+    #####: 2405:                out_string(c, "OK");
+        -: 2406:            }
+        -: 2407:        }
+    #####: 2408:    } else if (strcmp(tokens[1].value, "mode") == 0 && ntokens >= 4 &&
+    #####: 2409:               settings.lru_maintainer_thread) {
+    #####: 2410:        if (strcmp(tokens[2].value, "flat") == 0) {
+    #####: 2411:            settings.lru_segmented = false;
+    #####: 2412:            out_string(c, "OK");
+    #####: 2413:        } else if (strcmp(tokens[2].value, "segmented") == 0) {
+    #####: 2414:            settings.lru_segmented = true;
+    #####: 2415:            out_string(c, "OK");
+        -: 2416:        } else {
+    #####: 2417:            out_string(c, "ERROR");
+        -: 2418:        }
+    #####: 2419:    } else if (strcmp(tokens[1].value, "temp_ttl") == 0 && ntokens >= 4 &&
+    #####: 2420:               settings.lru_maintainer_thread) {
+    #####: 2421:        if (!safe_strtol(tokens[2].value, &ttl)) {
+    #####: 2422:            out_string(c, "ERROR");
+        -: 2423:        } else {
+    #####: 2424:            if (ttl < 0) {
+    #####: 2425:                settings.temp_lru = false;
+        -: 2426:            } else {
+    #####: 2427:                settings.temp_lru = true;
+    #####: 2428:                settings.temporary_ttl = ttl;
+        -: 2429:            }
+    #####: 2430:            out_string(c, "OK");
+        -: 2431:        }
+        -: 2432:    } else {
+    #####: 2433:        out_string(c, "ERROR");
+        -: 2434:    }
+    #####: 2435:}
+        -: 2436:#ifdef EXTSTORE
+       19: 2437:static void process_extstore_command(conn *c, token_t *tokens, const size_t ntokens) {
+       19: 2438:    set_noreply_maybe(c, tokens, ntokens);
+       19: 2439:    bool ok = true;
+       19: 2440:    if (ntokens < 4) {
+        -: 2441:        ok = false;
+      19*: 2442:    } else if (strcmp(tokens[1].value, "free_memchunks") == 0 && ntokens > 4) {
+        -: 2443:        // setting is deprecated and ignored, but accepted for backcompat
+    #####: 2444:        unsigned int clsid = 0;
+    #####: 2445:        unsigned int limit = 0;
+    #####: 2446:        if (!safe_strtoul(tokens[2].value, &clsid) ||
+    #####: 2447:                !safe_strtoul(tokens[3].value, &limit)) {
+    #####: 2448:            ok = false;
+        -: 2449:        } else {
+    #####: 2450:            if (clsid < MAX_NUMBER_OF_SLAB_CLASSES) {
+        -: 2451:                ok = true;
+        -: 2452:            } else {
+    #####: 2453:                ok = false;
+        -: 2454:            }
+        -: 2455:        }
+       19: 2456:    } else if (strcmp(tokens[1].value, "item_size") == 0) {
+    #####: 2457:        if (!safe_strtoul(tokens[2].value, &settings.ext_item_size))
+        -: 2458:            ok = false;
+       19: 2459:    } else if (strcmp(tokens[1].value, "item_age") == 0) {
+        2: 2460:        if (!safe_strtoul(tokens[2].value, &settings.ext_item_age))
+        -: 2461:            ok = false;
+       17: 2462:    } else if (strcmp(tokens[1].value, "low_ttl") == 0) {
+    #####: 2463:        if (!safe_strtoul(tokens[2].value, &settings.ext_low_ttl))
+        -: 2464:            ok = false;
+       17: 2465:    } else if (strcmp(tokens[1].value, "recache_rate") == 0) {
+        3: 2466:        if (!safe_strtoul(tokens[2].value, &settings.ext_recache_rate))
+        -: 2467:            ok = false;
+       14: 2468:    } else if (strcmp(tokens[1].value, "compact_under") == 0) {
+        4: 2469:        if (!safe_strtoul(tokens[2].value, &settings.ext_compact_under))
+        -: 2470:            ok = false;
+       10: 2471:    } else if (strcmp(tokens[1].value, "drop_under") == 0) {
+        3: 2472:        if (!safe_strtoul(tokens[2].value, &settings.ext_drop_under))
+        -: 2473:            ok = false;
+        7: 2474:    } else if (strcmp(tokens[1].value, "max_sleep") == 0) {
+    #####: 2475:        if (!safe_strtoul(tokens[2].value, &settings.ext_max_sleep))
+        -: 2476:            ok = false;
+        7: 2477:    } else if (strcmp(tokens[1].value, "max_frag") == 0) {
+        3: 2478:        if (!safe_strtod(tokens[2].value, &settings.ext_max_frag))
+        -: 2479:            ok = false;
+        4: 2480:    } else if (strcmp(tokens[1].value, "drop_unread") == 0) {
+        4: 2481:        unsigned int v;
+        4: 2482:        if (!safe_strtoul(tokens[2].value, &v)) {
+        -: 2483:            ok = false;
+        -: 2484:        } else {
+        4: 2485:            settings.ext_drop_unread = v == 0 ? false : true;
+        -: 2486:        }
+        -: 2487:    } else {
+        -: 2488:        ok = false;
+        -: 2489:    }
+       4*: 2490:    if (!ok) {
+    #####: 2491:        out_string(c, "ERROR");
+        -: 2492:    } else {
+       19: 2493:        out_string(c, "OK");
+        -: 2494:    }
+       19: 2495:}
+        -: 2496:#endif
+       12: 2497:static void process_flush_all_command(conn *c, token_t *tokens, const size_t ntokens) {
+       12: 2498:    int32_t exptime = 0;
+       12: 2499:    rel_time_t new_oldest = 0;
+        -: 2500:
+       12: 2501:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2502:
+       12: 2503:    pthread_mutex_lock(&c->thread->stats.mutex);
+       12: 2504:    c->thread->stats.flush_cmds++;
+       12: 2505:    pthread_mutex_unlock(&c->thread->stats.mutex);
+        -: 2506:
+       12: 2507:    if (!settings.flush_enabled) {
+        -: 2508:        // flush_all is not allowed but we log it on stats
+        1: 2509:        out_string(c, "CLIENT_ERROR flush_all not allowed");
+        3: 2510:        return;
+        -: 2511:    }
+        -: 2512:
+       20: 2513:    if (ntokens != (c->noreply ? 3 : 2)) {
+        6: 2514:        if (!safe_strtol(tokens[1].value, &exptime)) {
+        1: 2515:            out_string(c, "CLIENT_ERROR invalid exptime argument");
+        1: 2516:            return;
+        -: 2517:        }
+        -: 2518:    }
+        -: 2519:
+        -: 2520:    /*
+        -: 2521:      If exptime is zero realtime() would return zero too, and
+        -: 2522:      realtime(exptime) - 1 would overflow to the max unsigned
+        -: 2523:      value.  So we process exptime == 0 the same way we do when
+        -: 2524:      no delay is given at all.
+        -: 2525:    */
+       10: 2526:    if (exptime > 0) {
+        2: 2527:        new_oldest = realtime(exptime);
+        -: 2528:    } else { /* exptime == 0 */
+        8: 2529:        new_oldest = current_time;
+        -: 2530:    }
+        -: 2531:
+       10: 2532:    if (settings.use_cas) {
+        9: 2533:        settings.oldest_live = new_oldest - 1;
+        9: 2534:        if (settings.oldest_live <= current_time)
+        7: 2535:            settings.oldest_cas = get_cas_id();
+        -: 2536:    } else {
+        1: 2537:        settings.oldest_live = new_oldest;
+        -: 2538:    }
+       10: 2539:    out_string(c, "OK");
+        -: 2540:}
+        -: 2541:
+        6: 2542:static void process_version_command(conn *c) {
+        6: 2543:    out_string(c, "VERSION " VERSION);
+        6: 2544:}
+        -: 2545:
+        3: 2546:static void process_quit_command(conn *c) {
+        3: 2547:    conn_set_state(c, conn_mwrite);
+        3: 2548:    c->close_after_write = true;
+        3: 2549:    c->close_reason = NORMAL_CLOSE;
+        3: 2550:}
+        -: 2551:
+        5: 2552:static void process_shutdown_command(conn *c, token_t *tokens, const size_t ntokens) {
+        5: 2553:    if (!settings.shutdown_command) {
+        1: 2554:        out_string(c, "ERROR: shutdown not enabled");
+        1: 2555:        return;
+        -: 2556:    }
+        -: 2557:
+        4: 2558:    if (ntokens == 2) {
+        2: 2559:        c->close_reason = SHUTDOWN_CLOSE;
+        2: 2560:        conn_set_state(c, conn_closing);
+        2: 2561:        raise(SIGINT);
+        2: 2562:    } else if (ntokens == 3 && strcmp(tokens[SUBCOMMAND_TOKEN].value, "graceful") == 0) {
+        1: 2563:        c->close_reason = SHUTDOWN_CLOSE;
+        1: 2564:        conn_set_state(c, conn_closing);
+        1: 2565:        raise(SIGUSR1);
+        -: 2566:    } else {
+        1: 2567:        out_string(c, "CLIENT_ERROR invalid shutdown mode");
+        -: 2568:    }
+        -: 2569:}
+        -: 2570:
+       72: 2571:static void process_slabs_command(conn *c, token_t *tokens, const size_t ntokens) {
+       72: 2572:    if (ntokens == 5 && strcmp(tokens[COMMAND_TOKEN + 1].value, "reassign") == 0) {
+       70: 2573:        int src, dst, rv;
+        -: 2574:
+       70: 2575:        if (settings.slab_reassign == false) {
+    #####: 2576:            out_string(c, "CLIENT_ERROR slab reassignment disabled");
+    #####: 2577:            return;
+        -: 2578:        }
+        -: 2579:
+      139: 2580:        if (! (safe_strtol(tokens[2].value, (int32_t*)&src)
+       69: 2581:               && safe_strtol(tokens[3].value, (int32_t*)&dst))) {
+        1: 2582:            out_string(c, "CLIENT_ERROR bad command line format");
+        1: 2583:            return;
+        -: 2584:        }
+        -: 2585:
+       69: 2586:        rv = slabs_reassign(src, dst);
+       69: 2587:        switch (rv) {
+       67: 2588:        case REASSIGN_OK:
+       67: 2589:            out_string(c, "OK");
+       67: 2590:            break;
+    #####: 2591:        case REASSIGN_RUNNING:
+    #####: 2592:            out_string(c, "BUSY currently processing reassign request");
+    #####: 2593:            break;
+    #####: 2594:        case REASSIGN_BADCLASS:
+    #####: 2595:            out_string(c, "BADCLASS invalid src or dst class id");
+    #####: 2596:            break;
+        2: 2597:        case REASSIGN_NOSPARE:
+        2: 2598:            out_string(c, "NOSPARE source class has no spare pages");
+        2: 2599:            break;
+    #####: 2600:        case REASSIGN_SRC_DST_SAME:
+    #####: 2601:            out_string(c, "SAME src and dst class are identical");
+    #####: 2602:            break;
+        -: 2603:        }
+       69: 2604:        return;
+        2: 2605:    } else if (ntokens >= 4 &&
+        2: 2606:        (strcmp(tokens[COMMAND_TOKEN + 1].value, "automove") == 0)) {
+        2: 2607:        process_slabs_automove_command(c, tokens, ntokens);
+        -: 2608:    } else {
+    #####: 2609:        out_string(c, "ERROR");
+        -: 2610:    }
+        -: 2611:}
+        -: 2612:
+        9: 2613:static void process_lru_crawler_command(conn *c, token_t *tokens, const size_t ntokens) {
+        9: 2614:    if (ntokens == 4 && strcmp(tokens[COMMAND_TOKEN + 1].value, "crawl") == 0) {
+        4: 2615:        int rv;
+        4: 2616:        if (settings.lru_crawler == false) {
+    #####: 2617:            out_string(c, "CLIENT_ERROR lru crawler disabled");
+    #####: 2618:            return;
+        -: 2619:        }
+        -: 2620:
+        4: 2621:        rv = lru_crawler_crawl(tokens[2].value, CRAWLER_EXPIRED, NULL, 0,
+        -: 2622:                settings.lru_crawler_tocrawl);
+        4: 2623:        switch(rv) {
+        4: 2624:        case CRAWLER_OK:
+        4: 2625:            out_string(c, "OK");
+        4: 2626:            break;
+    #####: 2627:        case CRAWLER_RUNNING:
+    #####: 2628:            out_string(c, "BUSY currently processing crawler request");
+    #####: 2629:            break;
+    #####: 2630:        case CRAWLER_BADCLASS:
+    #####: 2631:            out_string(c, "BADCLASS invalid class id");
+    #####: 2632:            break;
+    #####: 2633:        case CRAWLER_NOTSTARTED:
+    #####: 2634:            out_string(c, "NOTSTARTED no items to crawl");
+    #####: 2635:            break;
+    #####: 2636:        case CRAWLER_ERROR:
+    #####: 2637:            out_string(c, "ERROR an unknown error happened");
+    #####: 2638:            break;
+        -: 2639:        }
+        4: 2640:        return;
+        5: 2641:    } else if (ntokens == 4 && strcmp(tokens[COMMAND_TOKEN + 1].value, "metadump") == 0) {
+        3: 2642:        if (settings.lru_crawler == false) {
+    #####: 2643:            out_string(c, "CLIENT_ERROR lru crawler disabled");
+    #####: 2644:            return;
+        -: 2645:        }
+        3: 2646:        if (!settings.dump_enabled) {
+    #####: 2647:            out_string(c, "ERROR metadump not allowed");
+    #####: 2648:            return;
+        -: 2649:        }
+        3: 2650:        if (resp_has_stack(c)) {
+        1: 2651:            out_string(c, "ERROR cannot pipeline other commands before metadump");
+        1: 2652:            return;
+        -: 2653:        }
+        -: 2654:
+        2: 2655:        int rv = lru_crawler_crawl(tokens[2].value, CRAWLER_METADUMP,
+        -: 2656:                c, c->sfd, LRU_CRAWLER_CAP_REMAINING);
+        2: 2657:        switch(rv) {
+        2: 2658:            case CRAWLER_OK:
+        -: 2659:                // TODO: documentation says this string is returned, but
+        -: 2660:                // it never was before. We never switch to conn_write so
+        -: 2661:                // this o_s call never worked. Need to talk to users and
+        -: 2662:                // decide if removing the OK from docs is fine.
+        -: 2663:                //out_string(c, "OK");
+        -: 2664:                // TODO: Don't reuse conn_watch here.
+        2: 2665:                conn_set_state(c, conn_watch);
+        2: 2666:                event_del(&c->event);
+        2: 2667:                break;
+    #####: 2668:            case CRAWLER_RUNNING:
+    #####: 2669:                out_string(c, "BUSY currently processing crawler request");
+    #####: 2670:                break;
+    #####: 2671:            case CRAWLER_BADCLASS:
+    #####: 2672:                out_string(c, "BADCLASS invalid class id");
+    #####: 2673:                break;
+    #####: 2674:            case CRAWLER_NOTSTARTED:
+    #####: 2675:                out_string(c, "NOTSTARTED no items to crawl");
+    #####: 2676:                break;
+    #####: 2677:            case CRAWLER_ERROR:
+    #####: 2678:                out_string(c, "ERROR an unknown error happened");
+    #####: 2679:                break;
+        -: 2680:        }
+        2: 2681:        return;
+       2*: 2682:    } else if (ntokens == 4 && strcmp(tokens[COMMAND_TOKEN + 1].value, "mgdump") == 0) {
+    #####: 2683:        if (settings.lru_crawler == false) {
+    #####: 2684:            out_string(c, "CLIENT_ERROR lru crawler disabled");
+    #####: 2685:            return;
+        -: 2686:        }
+    #####: 2687:        if (!settings.dump_enabled) {
+    #####: 2688:            out_string(c, "ERROR key dump not allowed");
+    #####: 2689:            return;
+        -: 2690:        }
+    #####: 2691:        if (resp_has_stack(c)) {
+    #####: 2692:            out_string(c, "ERROR cannot pipeline other commands before mgdump");
+    #####: 2693:            return;
+        -: 2694:        }
+        -: 2695:
+    #####: 2696:        int rv = lru_crawler_crawl(tokens[2].value, CRAWLER_MGDUMP,
+        -: 2697:                c, c->sfd, LRU_CRAWLER_CAP_REMAINING);
+    #####: 2698:        switch(rv) {
+    #####: 2699:            case CRAWLER_OK:
+    #####: 2700:                conn_set_state(c, conn_watch);
+    #####: 2701:                event_del(&c->event);
+    #####: 2702:                break;
+    #####: 2703:            case CRAWLER_RUNNING:
+    #####: 2704:                out_string(c, "BUSY currently processing crawler request");
+    #####: 2705:                break;
+    #####: 2706:            case CRAWLER_BADCLASS:
+    #####: 2707:                out_string(c, "BADCLASS invalid class id");
+    #####: 2708:                break;
+    #####: 2709:            case CRAWLER_NOTSTARTED:
+    #####: 2710:                out_string(c, "NOTSTARTED no items to crawl");
+    #####: 2711:                break;
+    #####: 2712:            case CRAWLER_ERROR:
+    #####: 2713:                out_string(c, "ERROR an unknown error happened");
+    #####: 2714:                break;
+        -: 2715:        }
+    #####: 2716:        return;
+       2*: 2717:    } else if (ntokens == 4 && strcmp(tokens[COMMAND_TOKEN + 1].value, "tocrawl") == 0) {
+    #####: 2718:        uint32_t tocrawl;
+    #####: 2719:         if (!safe_strtoul(tokens[2].value, &tocrawl)) {
+    #####: 2720:            out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 2721:            return;
+        -: 2722:        }
+    #####: 2723:        settings.lru_crawler_tocrawl = tocrawl;
+    #####: 2724:        out_string(c, "OK");
+    #####: 2725:        return;
+       2*: 2726:    } else if (ntokens == 4 && strcmp(tokens[COMMAND_TOKEN + 1].value, "sleep") == 0) {
+    #####: 2727:        uint32_t tosleep;
+    #####: 2728:        if (!safe_strtoul(tokens[2].value, &tosleep)) {
+    #####: 2729:            out_string(c, "CLIENT_ERROR bad command line format");
+    #####: 2730:            return;
+        -: 2731:        }
+    #####: 2732:        if (tosleep > 1000000) {
+    #####: 2733:            out_string(c, "CLIENT_ERROR sleep must be one second or less");
+    #####: 2734:            return;
+        -: 2735:        }
+    #####: 2736:        settings.lru_crawler_sleep = tosleep;
+    #####: 2737:        out_string(c, "OK");
+    #####: 2738:        return;
+        2: 2739:    } else if (ntokens == 3) {
+        2: 2740:        if ((strcmp(tokens[COMMAND_TOKEN + 1].value, "enable") == 0)) {
+        1: 2741:            if (start_item_crawler_thread() == 0) {
+        1: 2742:                out_string(c, "OK");
+        -: 2743:            } else {
+    #####: 2744:                out_string(c, "ERROR failed to start lru crawler thread");
+        -: 2745:            }
+        1: 2746:        } else if ((strcmp(tokens[COMMAND_TOKEN + 1].value, "disable") == 0)) {
+        1: 2747:            if (stop_item_crawler_thread(CRAWLER_NOWAIT) == 0) {
+        1: 2748:                out_string(c, "OK");
+        -: 2749:            } else {
+    #####: 2750:                out_string(c, "ERROR failed to stop lru crawler thread");
+        -: 2751:            }
+        -: 2752:        } else {
+    #####: 2753:            out_string(c, "ERROR");
+        -: 2754:        }
+        2: 2755:        return;
+        -: 2756:    } else {
+    #####: 2757:        out_string(c, "ERROR");
+        -: 2758:    }
+        -: 2759:}
+        -: 2760:#ifdef TLS
+        -: 2761:static void process_refresh_certs_command(conn *c, token_t *tokens, const size_t ntokens) {
+        -: 2762:    set_noreply_maybe(c, tokens, ntokens);
+        -: 2763:    char *errmsg = NULL;
+        -: 2764:    if (refresh_certs(&errmsg)) {
+        -: 2765:        out_string(c, "OK");
+        -: 2766:    } else {
+        -: 2767:        write_and_free(c, errmsg, strlen(errmsg));
+        -: 2768:    }
+        -: 2769:    return;
+        -: 2770:}
+        -: 2771:#endif
+        -: 2772:
+        -: 2773:// TODO: pipelined commands are incompatible with shifting connections to a
+        -: 2774:// side thread. Given this only happens in two instances (watch and
+        -: 2775:// lru_crawler metadump) it should be fine for things to bail. It _should_ be
+        -: 2776:// unusual for these commands.
+        -: 2777:// This is hard to fix since tokenize_command() mutilates the read buffer, so
+        -: 2778:// we can't drop out and back in again.
+        -: 2779:// Leaving this note here to spend more time on a fix when necessary, or if an
+        -: 2780:// opportunity becomes obvious.
+   565998: 2781:void process_command_ascii(conn *c, char *command) {
+        -: 2782:
+   565998: 2783:    token_t tokens[MAX_TOKENS];
+   565998: 2784:    size_t ntokens;
+   565998: 2785:    int comm;
+        -: 2786:
+  565998*: 2787:    assert(c != NULL);
+        -: 2788:
+   565998: 2789:    MEMCACHED_PROCESS_COMMAND_START(c->sfd, c->rcurr, c->rbytes);
+        -: 2790:
+   565998: 2791:    if (settings.verbose > 1)
+    #####: 2792:        fprintf(stderr, "<%d %s\n", c->sfd, command);
+        -: 2793:
+        -: 2794:    /*
+        -: 2795:     * for commands set/add/replace, we build an item and read the data
+        -: 2796:     * directly into it, then continue in nread_complete().
+        -: 2797:     */
+        -: 2798:
+        -: 2799:    // Prep the response object for this query.
+   565998: 2800:    if (!resp_start(c)) {
+        1: 2801:        conn_set_state(c, conn_closing);
+        1: 2802:        return;
+        -: 2803:    }
+        -: 2804:
+   565997: 2805:    c->thread->cur_sfd = c->sfd; // cuddle sfd for logging.
+   565997: 2806:    ntokens = tokenize_command(command, tokens, MAX_TOKENS);
+        -: 2807:    // All commands need a minimum of two tokens: cmd and NULL finalizer
+        -: 2808:    // There are also no valid commands shorter than two bytes.
+   565997: 2809:    if (ntokens < 2 || tokens[COMMAND_TOKEN].length < 2) {
+        5: 2810:        out_string(c, "ERROR");
+        5: 2811:        return;
+        -: 2812:    }
+        -: 2813:
+        -: 2814:    // Meta commands are all 2-char in length.
+   565992: 2815:    char first = tokens[COMMAND_TOKEN].value[0];
+   565992: 2816:    if (first == 'm' && tokens[COMMAND_TOKEN].length == 2) {
+     1388: 2817:        switch (tokens[COMMAND_TOKEN].value[1]) {
+     1314: 2818:            case 'g':
+     1314: 2819:                process_mget_command(c, tokens, ntokens);
+     1314: 2820:                break;
+       45: 2821:            case 's':
+       45: 2822:                process_mset_command(c, tokens, ntokens);
+       45: 2823:                break;
+        9: 2824:            case 'd':
+        9: 2825:                process_mdelete_command(c, tokens, ntokens);
+        9: 2826:                break;
+        3: 2827:            case 'n':
+        3: 2828:                out_string(c, "MN");
+        -: 2829:                // mn command forces immediate writeback flush.
+        3: 2830:                conn_set_state(c, conn_mwrite);
+        3: 2831:                break;
+       15: 2832:            case 'a':
+       15: 2833:                process_marithmetic_command(c, tokens, ntokens);
+       15: 2834:                break;
+        2: 2835:            case 'e':
+        2: 2836:                process_meta_command(c, tokens, ntokens);
+        2: 2837:                break;
+    #####: 2838:            default:
+    #####: 2839:                out_string(c, "ERROR");
+    #####: 2840:                break;
+        -: 2841:        }
+   564604: 2842:    } else if (first == 'g') {
+        -: 2843:        // Various get commands are very common.
+  112696*: 2844:        WANT_TOKENS_MIN(ntokens, 3);
+   112696: 2845:        if (strcmp(tokens[COMMAND_TOKEN].value, "get") == 0) {
+        -: 2846:
+   112666: 2847:            process_get_command(c, tokens, ntokens, false, false);
+       30: 2848:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "gets") == 0) {
+        -: 2849:
+       24: 2850:            process_get_command(c, tokens, ntokens, true, false);
+        6: 2851:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "gat") == 0) {
+        -: 2852:
+        5: 2853:            process_get_command(c, tokens, ntokens, false, true);
+        1: 2854:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "gats") == 0) {
+        -: 2855:
+        1: 2856:            process_get_command(c, tokens, ntokens, true, true);
+        -: 2857:        } else {
+    #####: 2858:            out_string(c, "ERROR");
+        -: 2859:        }
+   451908: 2860:    } else if (first == 's') {
+   291743: 2861:        if (strcmp(tokens[COMMAND_TOKEN].value, "set") == 0 && (comm = NREAD_SET)) {
+        -: 2862:
+  286295*: 2863:            WANT_TOKENS_OR(ntokens, 6, 7);
+   286295: 2864:            process_update_command(c, tokens, ntokens, comm, false);
+     5448: 2865:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "stats") == 0) {
+        -: 2866:
+     5371: 2867:            process_stat(c, tokens, ntokens);
+       77: 2868:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "shutdown") == 0) {
+        -: 2869:
+        5: 2870:            process_shutdown_command(c, tokens, ntokens);
+       72: 2871:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "slabs") == 0) {
+        -: 2872:
+       72: 2873:            process_slabs_command(c, tokens, ntokens);
+        -: 2874:        } else {
+    #####: 2875:            out_string(c, "ERROR");
+        -: 2876:        }
+   160165: 2877:    } else if (first == 'a') {
+     8641: 2878:        if ((strcmp(tokens[COMMAND_TOKEN].value, "add") == 0 && (comm = NREAD_ADD)) ||
+     8003: 2879:            (strcmp(tokens[COMMAND_TOKEN].value, "append") == 0 && (comm = NREAD_APPEND)) ) {
+        -: 2880:
+    8641*: 2881:            WANT_TOKENS_OR(ntokens, 6, 7);
+     8641: 2882:            process_update_command(c, tokens, ntokens, comm, false);
+        -: 2883:        } else {
+    #####: 2884:            out_string(c, "ERROR");
+        -: 2885:        }
+   151524: 2886:    } else if (first == 'c') {
+       20: 2887:        if (strcmp(tokens[COMMAND_TOKEN].value, "cas") == 0 && (comm = NREAD_CAS)) {
+        -: 2888:
+       17: 2889:            WANT_TOKENS_OR(ntokens, 7, 8);
+       16: 2890:            process_update_command(c, tokens, ntokens, comm, true);
+        3: 2891:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "cache_memlimit") == 0) {
+        -: 2892:
+       3*: 2893:            WANT_TOKENS_OR(ntokens, 3, 4);
+        3: 2894:            process_memlimit_command(c, tokens, ntokens);
+        -: 2895:        } else {
+    #####: 2896:            out_string(c, "ERROR");
+        -: 2897:        }
+   151504: 2898:    } else if (first == 'i') {
+      263: 2899:        if (strcmp(tokens[COMMAND_TOKEN].value, "incr") == 0) {
+        -: 2900:
+     263*: 2901:            WANT_TOKENS_OR(ntokens, 4, 5);
+      263: 2902:            process_arithmetic_command(c, tokens, ntokens, 1);
+        -: 2903:        } else {
+    #####: 2904:            out_string(c, "ERROR");
+        -: 2905:        }
+   151241: 2906:    } else if (first == 'd') {
+   141162: 2907:        if (strcmp(tokens[COMMAND_TOKEN].value, "delete") == 0) {
+        -: 2908:
+  141147*: 2909:            WANT_TOKENS(ntokens, 3, 5);
+   141147: 2910:            process_delete_command(c, tokens, ntokens);
+       15: 2911:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "decr") == 0) {
+        -: 2912:
+      10*: 2913:            WANT_TOKENS_OR(ntokens, 4, 5);
+       10: 2914:            process_arithmetic_command(c, tokens, ntokens, 0);
+        -: 2915:#ifdef MEMCACHED_DEBUG
+        5: 2916:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "debugtime") == 0) {
+        5: 2917:            WANT_TOKENS_MIN(ntokens, 2);
+        5: 2918:            process_debugtime_command(c, tokens, ntokens);
+        -: 2919:#endif
+        -: 2920:        } else {
+    #####: 2921:            out_string(c, "ERROR");
+        -: 2922:        }
+    10079: 2923:    } else if (first == 't') {
+     2004: 2924:        if (strcmp(tokens[COMMAND_TOKEN].value, "touch") == 0) {
+        -: 2925:
+    2004*: 2926:            WANT_TOKENS_OR(ntokens, 4, 5);
+     2004: 2927:            process_touch_command(c, tokens, ntokens);
+        -: 2928:        } else {
+    #####: 2929:            out_string(c, "ERROR");
+        -: 2930:        }
+     8075: 2931:    } else if (
+     8075: 2932:                (strcmp(tokens[COMMAND_TOKEN].value, "replace") == 0 && (comm = NREAD_REPLACE)) ||
+     8072: 2933:                (strcmp(tokens[COMMAND_TOKEN].value, "prepend") == 0 && (comm = NREAD_PREPEND)) ) {
+        -: 2934:
+    8006*: 2935:        WANT_TOKENS_OR(ntokens, 6, 7);
+     8006: 2936:        process_update_command(c, tokens, ntokens, comm, false);
+        -: 2937:
+       69: 2938:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "bget") == 0) {
+        -: 2939:        // ancient "binary get" command which isn't in any documentation, was
+        -: 2940:        // removed > 10 years ago, etc. Keeping for compatibility reasons but
+        -: 2941:        // we should look deeper into client code and remove this.
+    #####: 2942:        WANT_TOKENS_MIN(ntokens, 3);
+    #####: 2943:        process_get_command(c, tokens, ntokens, false, false);
+        -: 2944:
+       69: 2945:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "flush_all") == 0) {
+        -: 2946:
+      12*: 2947:        WANT_TOKENS(ntokens, 2, 4);
+       12: 2948:        process_flush_all_command(c, tokens, ntokens);
+        -: 2949:
+       57: 2950:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "version") == 0) {
+        -: 2951:
+        6: 2952:        process_version_command(c);
+        -: 2953:
+       51: 2954:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "quit") == 0) {
+        -: 2955:
+        3: 2956:        process_quit_command(c);
+        -: 2957:
+       48: 2958:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "lru_crawler") == 0) {
+        -: 2959:
+        9: 2960:        process_lru_crawler_command(c, tokens, ntokens);
+        -: 2961:
+       39: 2962:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "watch") == 0) {
+        -: 2963:
+       12: 2964:        process_watch_command(c, tokens, ntokens);
+        -: 2965:
+       27: 2966:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "verbosity") == 0) {
+       2*: 2967:        WANT_TOKENS_OR(ntokens, 3, 4);
+        2: 2968:        process_verbosity_command(c, tokens, ntokens);
+       25: 2969:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "lru") == 0) {
+    #####: 2970:        WANT_TOKENS_MIN(ntokens, 3);
+    #####: 2971:        process_lru_command(c, tokens, ntokens);
+        -: 2972:#ifdef MEMCACHED_DEBUG
+        -: 2973:    // commands which exist only for testing the memcached's security protection
+       25: 2974:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "misbehave") == 0) {
+    #####: 2975:        process_misbehave_command(c);
+        -: 2976:#endif
+        -: 2977:#ifdef EXTSTORE
+       25: 2978:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "extstore") == 0) {
+      19*: 2979:        WANT_TOKENS_MIN(ntokens, 3);
+       19: 2980:        process_extstore_command(c, tokens, ntokens);
+        -: 2981:#endif
+        -: 2982:#ifdef TLS
+        -: 2983:    } else if (strcmp(tokens[COMMAND_TOKEN].value, "refresh_certs") == 0) {
+        -: 2984:        process_refresh_certs_command(c, tokens, ntokens);
+        -: 2985:#endif
+        -: 2986:    } else {
+        6: 2987:        if (strncmp(tokens[ntokens - 2].value, "HTTP/", 5) == 0) {
+        4: 2988:            conn_set_state(c, conn_closing);
+        -: 2989:        } else {
+        2: 2990:            out_string(c, "ERROR");
+        -: 2991:        }
+        -: 2992:    }
+        -: 2993:    return;
+        -: 2994:}
+        -: 2995:
+        -: 2996:
