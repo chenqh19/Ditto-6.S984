@@ -134,14 +134,14 @@
         -:  130:};
         -:  131:
         -:  132:/* Default methods to read from/ write to a socket */
-   559046:  133:ssize_t tcp_read(conn *c, void *buf, size_t count) {
-  559046*:  134:    assert (c != NULL);
-   559046:  135:    return read(c->sfd, buf, count);
+   559327:  133:ssize_t tcp_read(conn *c, void *buf, size_t count) {
+  559327*:  134:    assert (c != NULL);
+   559327:  135:    return read(c->sfd, buf, count);
         -:  136:}
         -:  137:
-   415625:  138:ssize_t tcp_sendmsg(conn *c, struct msghdr *msg, int flags) {
-  415625*:  139:    assert (c != NULL);
-   415625:  140:    return sendmsg(c->sfd, msg, flags);
+   415501:  138:ssize_t tcp_sendmsg(conn *c, struct msghdr *msg, int flags) {
+  415501*:  139:    assert (c != NULL);
+   415501:  140:    return sendmsg(c->sfd, msg, flags);
         -:  141:}
         -:  142:
      4045:  143:ssize_t tcp_write(conn *c, void *buf, size_t count) {
@@ -178,12 +178,12 @@
         -:  174: * unix time. Use the fact that delta can't exceed one month (and real time value can't
         -:  175: * be that low).
         -:  176: */
-   329436:  177:rel_time_t realtime(const time_t exptime) {
+   329450:  177:rel_time_t realtime(const time_t exptime) {
         -:  178:    /* no. of seconds in 30 days - largest possible delta exptime */
         -:  179:
-   329436:  180:    if (exptime == 0) return 0; /* 0 means never expire */
+   329450:  180:    if (exptime == 0) return 0; /* 0 means never expire */
         -:  181:
-     1660:  182:    if (exptime > REALTIME_MAXDELTA) {
+     1684:  182:    if (exptime > REALTIME_MAXDELTA) {
         -:  183:        /* if item expiration is at/before the server started, give it an
         -:  184:           expiration time of 1 second after the server started.
         -:  185:           (because 0 means don't expire).  without this, we'd
@@ -194,7 +194,7 @@
         -:  190:            return (rel_time_t)1;
         8:  191:        return (rel_time_t)(exptime - process_started);
         -:  192:    } else {
-     1647:  193:        return (rel_time_t)(exptime + current_time);
+     1671:  193:        return (rel_time_t)(exptime + current_time);
         -:  194:    }
         -:  195:}
         -:  196:
@@ -410,31 +410,31 @@
         -:  406:/*
         -:  407: * read buffer cache helper functions
         -:  408: */
-   462741:  409:static void rbuf_release(conn *c) {
-   462741:  410:    if (c->rbuf != NULL && c->rbytes == 0 && !IS_UDP(c->transport)) {
-   456876:  411:        if (c->rbuf_malloced) {
+   463890:  409:static void rbuf_release(conn *c) {
+   463890:  410:    if (c->rbuf != NULL && c->rbytes == 0 && !IS_UDP(c->transport)) {
+   457963:  411:        if (c->rbuf_malloced) {
         3:  412:            free(c->rbuf);
         3:  413:            c->rbuf_malloced = false;
         -:  414:        } else {
-   456873:  415:            do_cache_free(c->thread->rbuf_cache, c->rbuf);
+   457960:  415:            do_cache_free(c->thread->rbuf_cache, c->rbuf);
         -:  416:        }
-   456876:  417:        c->rsize = 0;
-   456876:  418:        c->rbuf = NULL;
-   456876:  419:        c->rcurr = NULL;
+   457963:  417:        c->rsize = 0;
+   457963:  418:        c->rbuf = NULL;
+   457963:  419:        c->rcurr = NULL;
         -:  420:    }
-   462741:  421:}
+   463890:  421:}
         -:  422:
-   460586:  423:static bool rbuf_alloc(conn *c) {
-   460586:  424:    if (c->rbuf == NULL) {
-   456876:  425:        c->rbuf = do_cache_alloc(c->thread->rbuf_cache);
-   456876:  426:        if (!c->rbuf) {
+   461738:  423:static bool rbuf_alloc(conn *c) {
+   461738:  424:    if (c->rbuf == NULL) {
+   457963:  425:        c->rbuf = do_cache_alloc(c->thread->rbuf_cache);
+   457963:  426:        if (!c->rbuf) {
     #####:  427:            THR_STATS_LOCK(c->thread);
     #####:  428:            c->thread->stats.read_buf_oom++;
     #####:  429:            THR_STATS_UNLOCK(c->thread);
     #####:  430:            return false;
         -:  431:        }
-   456876:  432:        c->rsize = READ_BUFFER_SIZE;
-   456876:  433:        c->rcurr = c->rbuf;
+   457963:  432:        c->rsize = READ_BUFFER_SIZE;
+   457963:  433:        c->rcurr = c->rbuf;
         -:  434:    }
         -:  435:    return true;
         -:  436:}
@@ -839,10 +839,10 @@
      2334:  835:    return c;
         -:  836:}
         -:  837:
-   468585:  838:void conn_release_items(conn *c) {
-  468585*:  839:    assert(c != NULL);
+   469453:  838:void conn_release_items(conn *c) {
+  469453*:  839:    assert(c != NULL);
         -:  840:
-   468585:  841:    if (c->item) {
+   469453:  841:    if (c->item) {
         2:  842:        if (c->item_malloced) {
     #####:  843:            free(c->item);
     #####:  844:            c->item_malloced = false;
@@ -853,7 +853,7 @@
         -:  849:    }
         -:  850:
         -:  851:    // Cull any unsent responses.
-   468585:  852:    if (c->resp_head) {
+   469453:  852:    if (c->resp_head) {
         -:  853:        mc_resp *resp = c->resp_head;
         -:  854:        // r_f() handles the chain maintenance.
       122:  855:        while (resp) {
@@ -873,7 +873,7 @@
         -:  869:        }
        28:  870:        conn_io_queue_reset(c);
         -:  871:    }
-   468585:  872:}
+   469453:  872:}
         -:  873:
      2133:  874:static void conn_cleanup(conn *c) {
     2133*:  875:    assert(c != NULL);
@@ -999,33 +999,33 @@
         -:  995: * processing that needs to happen on certain state transitions can
         -:  996: * happen here.
         -:  997: */
-  3279040:  998:void conn_set_state(conn *c, enum conn_states state) {
- 3279040*:  999:    assert(c != NULL);
- 3279040*: 1000:    assert(state >= conn_listening && state < conn_max_state);
+  3283024:  998:void conn_set_state(conn *c, enum conn_states state) {
+ 3283024*:  999:    assert(c != NULL);
+ 3283024*: 1000:    assert(state >= conn_listening && state < conn_max_state);
         -: 1001:
-  3279040: 1002:    if (state != c->state) {
-  3279039: 1003:        if (settings.verbose > 2) {
+  3283024: 1002:    if (state != c->state) {
+  3283023: 1003:        if (settings.verbose > 2) {
     #####: 1004:            fprintf(stderr, "%d: going from %s to %s\n",
         -: 1005:                    c->sfd, state_text(c->state),
         -: 1006:                    state_text(state));
         -: 1007:        }
         -: 1008:
-  3279039: 1009:        if (state == conn_write || state == conn_mwrite) {
-  3279039: 1010:            MEMCACHED_PROCESS_COMMAND_END(c->sfd, c->resp->wbuf, c->resp->wbytes);
+  3283023: 1009:        if (state == conn_write || state == conn_mwrite) {
+  3283023: 1010:            MEMCACHED_PROCESS_COMMAND_END(c->sfd, c->resp->wbuf, c->resp->wbytes);
         -: 1011:        }
-  3279039: 1012:        c->state = state;
+  3283023: 1012:        c->state = state;
         -: 1013:    }
-  3279040: 1014:}
+  3283024: 1014:}
         -: 1015:
         -: 1016:/*
         -: 1017: * response object helper functions
         -: 1018: */
-   461514: 1019:void resp_reset(mc_resp *resp) {
-   461514: 1020:    if (resp->item) {
+   461422: 1019:void resp_reset(mc_resp *resp) {
+   461422: 1020:    if (resp->item) {
     #####: 1021:        item_remove(resp->item);
     #####: 1022:        resp->item = NULL;
         -: 1023:    }
-   461514: 1024:    if (resp->write_and_free) {
+   461422: 1024:    if (resp->write_and_free) {
         -: 1025:#ifdef PROXY
         -: 1026:        if (resp->proxy_res) {
         -: 1027:            LIBEVENT_THREAD *t = resp->bundle->thread;
@@ -1037,22 +1037,22 @@
     #####: 1033:        free(resp->write_and_free);
     #####: 1034:        resp->write_and_free = NULL;
         -: 1035:    }
-   461514: 1036:    resp->wbytes = 0;
-   461514: 1037:    resp->tosend = 0;
-   461514: 1038:    resp->iovcnt = 0;
-   461514: 1039:    resp->chunked_data_iov = 0;
-   461514: 1040:    resp->chunked_total = 0;
-   461514: 1041:    resp->skip = false;
-   461514: 1042:}
+   461422: 1036:    resp->wbytes = 0;
+   461422: 1037:    resp->tosend = 0;
+   461422: 1038:    resp->iovcnt = 0;
+   461422: 1039:    resp->chunked_data_iov = 0;
+   461422: 1040:    resp->chunked_total = 0;
+   461422: 1041:    resp->skip = false;
+   461422: 1042:}
         -: 1043:
-   532384: 1044:void resp_add_iov(mc_resp *resp, const void *buf, int len) {
-  532384*: 1045:    assert(resp->iovcnt < MC_RESP_IOVCOUNT);
-   532384: 1046:    int x = resp->iovcnt;
-   532384: 1047:    resp->iov[x].iov_base = (void *)buf;
-   532384: 1048:    resp->iov[x].iov_len = len;
-   532384: 1049:    resp->iovcnt++;
-   532384: 1050:    resp->tosend += len;
-   532384: 1051:}
+   532188: 1044:void resp_add_iov(mc_resp *resp, const void *buf, int len) {
+  532188*: 1045:    assert(resp->iovcnt < MC_RESP_IOVCOUNT);
+   532188: 1046:    int x = resp->iovcnt;
+   532188: 1047:    resp->iov[x].iov_base = (void *)buf;
+   532188: 1048:    resp->iov[x].iov_len = len;
+   532188: 1049:    resp->iovcnt++;
+   532188: 1050:    resp->tosend += len;
+   532188: 1051:}
         -: 1052:
         -: 1053:// Notes that an IOV should be handled as a chunked item header.
         -: 1054:// TODO: I'm hoping this isn't a permanent abstraction while I learn what the
@@ -1130,57 +1130,57 @@
         -: 1126:    return resp;
         -: 1127:}
         -: 1128:
-   620542: 1129:void resp_free(LIBEVENT_THREAD *th, mc_resp *resp) {
-   620542: 1130:    mc_resp_bundle *b = resp->bundle;
+   620436: 1129:void resp_free(LIBEVENT_THREAD *th, mc_resp *resp) {
+   620436: 1130:    mc_resp_bundle *b = resp->bundle;
         -: 1131:
-   620542: 1132:    resp->free = true;
-   620542: 1133:    b->refcount--;
-   620542: 1134:    if (b->refcount == 0) {
-   472714: 1135:        if (b == th->open_bundle && b->next == 0) {
+   620436: 1132:    resp->free = true;
+   620436: 1133:    b->refcount--;
+   620436: 1134:    if (b->refcount == 0) {
+   473498: 1135:        if (b == th->open_bundle && b->next == 0) {
         -: 1136:            // This is the final bundle. Just hold and reuse to skip init loop
-  466474*: 1137:            assert(b->prev == 0);
-   466474: 1138:            b->next_check = 0;
+  467342*: 1137:            assert(b->prev == 0);
+   467342: 1138:            b->next_check = 0;
         -: 1139:        } else {
         -: 1140:            // Assert that we're either in the list or at the head.
-    6240*: 1141:            assert((b->next || b->prev) || b == th->open_bundle);
+    6156*: 1141:            assert((b->next || b->prev) || b == th->open_bundle);
         -: 1142:
         -: 1143:            // unlink from list.
-     6240: 1144:            mc_resp_bundle **head = &th->open_bundle;
-     6240: 1145:            if (*head == b) *head = b->next;
+     6156: 1144:            mc_resp_bundle **head = &th->open_bundle;
+     6156: 1145:            if (*head == b) *head = b->next;
         -: 1146:            // Not tracking the tail.
-    6240*: 1147:            assert(b->next != b && b->prev != b);
+    6156*: 1147:            assert(b->next != b && b->prev != b);
         -: 1148:
-     6240: 1149:            if (b->next) b->next->prev = b->prev;
-    6240*: 1150:            if (b->prev) b->prev->next = b->next;
+     6156: 1149:            if (b->next) b->next->prev = b->prev;
+    6156*: 1150:            if (b->prev) b->prev->next = b->next;
         -: 1151:
         -: 1152:            // Now completely done with this buffer.
-     6240: 1153:            do_cache_free(th->rbuf_cache, b);
-     6240: 1154:            THR_STATS_LOCK(th);
-     6240: 1155:            th->stats.response_obj_bytes -= READ_BUFFER_SIZE;
-     6240: 1156:            THR_STATS_UNLOCK(th);
+     6156: 1153:            do_cache_free(th->rbuf_cache, b);
+     6156: 1154:            THR_STATS_LOCK(th);
+     6156: 1155:            th->stats.response_obj_bytes -= READ_BUFFER_SIZE;
+     6156: 1156:            THR_STATS_UNLOCK(th);
         -: 1157:        }
         -: 1158:    } else {
-   147828: 1159:        mc_resp_bundle **head = &th->open_bundle;
+   146938: 1159:        mc_resp_bundle **head = &th->open_bundle;
         -: 1160:        // NOTE: since we're not tracking tail, latest free ends up in head.
-   147828: 1161:        if (b == th->open_bundle || (b->prev || b->next)) {
+   146938: 1161:        if (b == th->open_bundle || (b->prev || b->next)) {
         -: 1162:            // If we're already linked, leave it in place to save CPU.
         -: 1163:        } else {
         -: 1164:            // Non-zero refcount, need to link into the freelist.
-     6298: 1165:            b->prev = 0;
-     6298: 1166:            b->next = *head;
-     6298: 1167:            if (b->next) b->next->prev = b;
-     6298: 1168:            *head = b;
+     6234: 1165:            b->prev = 0;
+     6234: 1166:            b->next = *head;
+     6234: 1167:            if (b->next) b->next->prev = b;
+     6234: 1168:            *head = b;
         -: 1169:        }
         -: 1170:
         -: 1171:    }
-   620542: 1172:    THR_STATS_LOCK(th);
-   620542: 1173:    th->stats.response_obj_count--;
-   620542: 1174:    THR_STATS_UNLOCK(th);
-   620542: 1175:}
+   620436: 1172:    THR_STATS_LOCK(th);
+   620436: 1173:    th->stats.response_obj_count--;
+   620436: 1174:    THR_STATS_UNLOCK(th);
+   620436: 1175:}
         -: 1176:
-   620544: 1177:bool resp_start(conn *c) {
-   620544: 1178:    mc_resp *resp = resp_allocate(c);
-   620544: 1179:    if (!resp) {
+   620438: 1177:bool resp_start(conn *c) {
+   620438: 1178:    mc_resp *resp = resp_allocate(c);
+   620438: 1179:    if (!resp) {
         2: 1180:        THR_STATS_LOCK(c->thread);
         2: 1181:        c->thread->stats.response_obj_oom++;
         2: 1182:        THR_STATS_UNLOCK(c->thread);
@@ -1188,20 +1188,20 @@
         -: 1184:    }
         -: 1185:
         -: 1186:    // handling the stats counters here to simplify testing
-   620542: 1187:    THR_STATS_LOCK(c->thread);
-   620542: 1188:    c->thread->stats.response_obj_count++;
-   620542: 1189:    THR_STATS_UNLOCK(c->thread);
+   620436: 1187:    THR_STATS_LOCK(c->thread);
+   620436: 1188:    c->thread->stats.response_obj_count++;
+   620436: 1189:    THR_STATS_UNLOCK(c->thread);
         -: 1190:
-   620542: 1191:    if (!c->resp_head) {
-   466476: 1192:        c->resp_head = resp;
+   620436: 1191:    if (!c->resp_head) {
+   467344: 1192:        c->resp_head = resp;
         -: 1193:    }
-   620542: 1194:    if (!c->resp) {
-   466476: 1195:        c->resp = resp;
+   620436: 1194:    if (!c->resp) {
+   467344: 1195:        c->resp = resp;
         -: 1196:    } else {
-   154066: 1197:        c->resp->next = resp;
-   154066: 1198:        c->resp = resp;
+   153092: 1197:        c->resp->next = resp;
+   153092: 1198:        c->resp = resp;
         -: 1199:    }
-   620542: 1200:    if (IS_UDP(c->transport)) {
+   620436: 1200:    if (IS_UDP(c->transport)) {
         -: 1201:        // need to hold on to some data for async responses.
        18: 1202:        c->resp->request_id = c->request_id;
        18: 1203:        c->resp->request_addr = c->request_addr;
@@ -1235,14 +1235,14 @@
         -: 1231:}
         -: 1232:
         -: 1233:// returns next response in chain.
-   620542: 1234:mc_resp* resp_finish(conn *c, mc_resp *resp) {
-   620542: 1235:    mc_resp *next = resp->next;
-   620542: 1236:    if (resp->item) {
+   620436: 1234:mc_resp* resp_finish(conn *c, mc_resp *resp) {
+   620436: 1235:    mc_resp *next = resp->next;
+   620436: 1236:    if (resp->item) {
         -: 1237:        // TODO: cache hash value in resp obj?
-    56290: 1238:        item_remove(resp->item);
-    56290: 1239:        resp->item = NULL;
+    56289: 1238:        item_remove(resp->item);
+    56289: 1239:        resp->item = NULL;
         -: 1240:    }
-   620542: 1241:    if (resp->write_and_free) {
+   620436: 1241:    if (resp->write_and_free) {
         -: 1242:#ifdef PROXY
         -: 1243:        if (resp->proxy_res) {
         -: 1244:            LIBEVENT_THREAD *t = resp->bundle->thread;
@@ -1251,9 +1251,9 @@
         -: 1247:            pthread_mutex_unlock(&t->proxy_limit_lock);
         -: 1248:        }
         -: 1249:#endif
-     5415: 1250:        free(resp->write_and_free);
+     5397: 1250:        free(resp->write_and_free);
         -: 1251:    }
-   620542: 1252:    if (resp->io_pending) {
+   620436: 1252:    if (resp->io_pending) {
       391: 1253:        io_pending_t *io = resp->io_pending;
         -: 1254:        // If we had a pending IO, tell it to internally clean up then return
         -: 1255:        // the main object back to our thread cache.
@@ -1261,14 +1261,14 @@
       391: 1257:        do_cache_free(c->thread->io_cache, io);
       391: 1258:        resp->io_pending = NULL;
         -: 1259:    }
-   620542: 1260:    if (c->resp_head == resp) {
-   620542: 1261:        c->resp_head = next;
+   620436: 1260:    if (c->resp_head == resp) {
+   620436: 1261:        c->resp_head = next;
         -: 1262:    }
-   620542: 1263:    if (c->resp == resp) {
-   466476: 1264:        c->resp = NULL;
+   620436: 1263:    if (c->resp == resp) {
+   467344: 1264:        c->resp = NULL;
         -: 1265:    }
-   620542: 1266:    resp_free(c->thread, resp);
-   620542: 1267:    return next;
+   620436: 1266:    resp_free(c->thread, resp);
+   620436: 1267:    return next;
         -: 1268:}
         -: 1269:
         -: 1270:// tells if connection has a depth of response objects to process.
@@ -1344,76 +1344,76 @@
         -: 1340:    }
         7: 1341:}
         -: 1342:
-     3028: 1343:static void append_bin_stats(const char *key, const uint16_t klen,
+     3214: 1343:static void append_bin_stats(const char *key, const uint16_t klen,
         -: 1344:                             const char *val, const uint32_t vlen,
         -: 1345:                             conn *c) {
-     3028: 1346:    char *buf = c->stats.buffer + c->stats.offset;
-     3028: 1347:    uint32_t bodylen = klen + vlen;
-     3028: 1348:    protocol_binary_response_header header = {
+     3214: 1346:    char *buf = c->stats.buffer + c->stats.offset;
+     3214: 1347:    uint32_t bodylen = klen + vlen;
+     3214: 1348:    protocol_binary_response_header header = {
         -: 1349:        .response.magic = (uint8_t)PROTOCOL_BINARY_RES,
         -: 1350:        .response.opcode = PROTOCOL_BINARY_CMD_STAT,
-     3028: 1351:        .response.keylen = (uint16_t)htons(klen),
+     3214: 1351:        .response.keylen = (uint16_t)htons(klen),
         -: 1352:        .response.datatype = (uint8_t)PROTOCOL_BINARY_RAW_BYTES,
-     3028: 1353:        .response.bodylen = htonl(bodylen),
-     3028: 1354:        .response.opaque = c->opaque
+     3214: 1353:        .response.bodylen = htonl(bodylen),
+     3214: 1354:        .response.opaque = c->opaque
         -: 1355:    };
         -: 1356:
-     3028: 1357:    memcpy(buf, header.bytes, sizeof(header.response));
-     3028: 1358:    buf += sizeof(header.response);
+     3214: 1357:    memcpy(buf, header.bytes, sizeof(header.response));
+     3214: 1358:    buf += sizeof(header.response);
         -: 1359:
-     3028: 1360:    if (klen > 0) {
-     2987: 1361:        memcpy(buf, key, klen);
-     2987: 1362:        buf += klen;
+     3214: 1360:    if (klen > 0) {
+     3171: 1361:        memcpy(buf, key, klen);
+     3171: 1362:        buf += klen;
         -: 1363:
-     2987: 1364:        if (vlen > 0) {
-     2987: 1365:            memcpy(buf, val, vlen);
+     3171: 1364:        if (vlen > 0) {
+     3171: 1365:            memcpy(buf, val, vlen);
         -: 1366:        }
         -: 1367:    }
         -: 1368:
-     3028: 1369:    c->stats.offset += sizeof(header.response) + bodylen;
-     3028: 1370:}
+     3214: 1369:    c->stats.offset += sizeof(header.response) + bodylen;
+     3214: 1370:}
         -: 1371:
-   460166: 1372:static void append_ascii_stats(const char *key, const uint16_t klen,
+   458286: 1372:static void append_ascii_stats(const char *key, const uint16_t klen,
         -: 1373:                               const char *val, const uint32_t vlen,
         -: 1374:                               conn *c) {
-   460166: 1375:    char *pos = c->stats.buffer + c->stats.offset;
-   460166: 1376:    uint32_t nbytes = 0;
-   460166: 1377:    int remaining = c->stats.size - c->stats.offset;
-   460166: 1378:    int room = remaining - 1;
+   458286: 1375:    char *pos = c->stats.buffer + c->stats.offset;
+   458286: 1376:    uint32_t nbytes = 0;
+   458286: 1377:    int remaining = c->stats.size - c->stats.offset;
+   458286: 1378:    int room = remaining - 1;
         -: 1379:
-   460166: 1380:    if (klen == 0 && vlen == 0) {
-     5364: 1381:        nbytes = snprintf(pos, room, "END\r\n");
-   454802: 1382:    } else if (vlen == 0) {
+   458286: 1380:    if (klen == 0 && vlen == 0) {
+     5344: 1381:        nbytes = snprintf(pos, room, "END\r\n");
+   452942: 1382:    } else if (vlen == 0) {
     #####: 1383:        nbytes = snprintf(pos, room, "STAT %s\r\n", key);
         -: 1384:    } else {
-   454802: 1385:        nbytes = snprintf(pos, room, "STAT %s %s\r\n", key, val);
+   452942: 1385:        nbytes = snprintf(pos, room, "STAT %s %s\r\n", key, val);
         -: 1386:    }
         -: 1387:
-   460166: 1388:    c->stats.offset += nbytes;
-   460166: 1389:}
+   458286: 1388:    c->stats.offset += nbytes;
+   458286: 1389:}
         -: 1390:
-   463194: 1391:static bool grow_stats_buf(conn *c, size_t needed) {
-   463194: 1392:    size_t nsize = c->stats.size;
-   463194: 1393:    size_t available = nsize - c->stats.offset;
-   463194: 1394:    bool rv = true;
+   461500: 1391:static bool grow_stats_buf(conn *c, size_t needed) {
+   461500: 1392:    size_t nsize = c->stats.size;
+   461500: 1393:    size_t available = nsize - c->stats.offset;
+   461500: 1394:    bool rv = true;
         -: 1395:
         -: 1396:    /* Special case: No buffer -- need to allocate fresh */
-   463194: 1397:    if (c->stats.buffer == NULL) {
-     5405: 1398:        nsize = 1024;
-     5405: 1399:        available = c->stats.size = c->stats.offset = 0;
+   461500: 1397:    if (c->stats.buffer == NULL) {
+     5387: 1398:        nsize = 1024;
+     5387: 1399:        available = c->stats.size = c->stats.offset = 0;
         -: 1400:    }
         -: 1401:
-   472397: 1402:    while (needed > available) {
-    9203*: 1403:        assert(nsize > 0);
-     9203: 1404:        nsize = nsize << 1;
-     9203: 1405:        available = nsize - c->stats.offset;
+   470667: 1402:    while (needed > available) {
+    9167*: 1403:        assert(nsize > 0);
+     9167: 1404:        nsize = nsize << 1;
+     9167: 1405:        available = nsize - c->stats.offset;
         -: 1406:    }
         -: 1407:
-   463194: 1408:    if (nsize != c->stats.size) {
-     9203: 1409:        char *ptr = realloc(c->stats.buffer, nsize);
-     9203: 1410:        if (ptr) {
-     9203: 1411:            c->stats.buffer = ptr;
-     9203: 1412:            c->stats.size = nsize;
+   461500: 1408:    if (nsize != c->stats.size) {
+     9167: 1409:        char *ptr = realloc(c->stats.buffer, nsize);
+     9167: 1410:        if (ptr) {
+     9167: 1411:            c->stats.buffer = ptr;
+     9167: 1412:            c->stats.size = nsize;
         -: 1413:        } else {
     #####: 1414:            STATS_LOCK();
     #####: 1415:            stats.malloc_fails++;
@@ -1422,41 +1422,41 @@
         -: 1418:        }
         -: 1419:    }
         -: 1420:
-   463194: 1421:    return rv;
+   461500: 1421:    return rv;
         -: 1422:}
         -: 1423:
-   463194: 1424:void append_stats(const char *key, const uint16_t klen,
+   461500: 1424:void append_stats(const char *key, const uint16_t klen,
         -: 1425:                  const char *val, const uint32_t vlen,
         -: 1426:                  const void *cookie)
         -: 1427:{
         -: 1428:    /* value without a key is invalid */
-   463194: 1429:    if (klen == 0 && vlen > 0) {
+   461500: 1429:    if (klen == 0 && vlen > 0) {
         -: 1430:        return;
         -: 1431:    }
         -: 1432:
-   463194: 1433:    conn *c = (conn*)cookie;
+   461500: 1433:    conn *c = (conn*)cookie;
         -: 1434:
-   463194: 1435:    if (c->protocol == binary_prot) {
-     3028: 1436:        size_t needed = vlen + klen + sizeof(protocol_binary_response_header);
-     3028: 1437:        if (!grow_stats_buf(c, needed)) {
+   461500: 1435:    if (c->protocol == binary_prot) {
+     3214: 1436:        size_t needed = vlen + klen + sizeof(protocol_binary_response_header);
+     3214: 1437:        if (!grow_stats_buf(c, needed)) {
         -: 1438:            return;
         -: 1439:        }
-     3028: 1440:        append_bin_stats(key, klen, val, vlen, c);
+     3214: 1440:        append_bin_stats(key, klen, val, vlen, c);
         -: 1441:    } else {
-   460166: 1442:        size_t needed = vlen + klen + 10; // 10 == "STAT = \r\n"
-   460166: 1443:        if (!grow_stats_buf(c, needed)) {
+   458286: 1442:        size_t needed = vlen + klen + 10; // 10 == "STAT = \r\n"
+   458286: 1443:        if (!grow_stats_buf(c, needed)) {
         -: 1444:            return;
         -: 1445:        }
-   460166: 1446:        append_ascii_stats(key, klen, val, vlen, c);
+   458286: 1446:        append_ascii_stats(key, klen, val, vlen, c);
         -: 1447:    }
         -: 1448:
-  463194*: 1449:    assert(c->stats.offset <= c->stats.size);
+  461500*: 1449:    assert(c->stats.offset <= c->stats.size);
         -: 1450:}
         -: 1451:
-   947603: 1452:static void reset_cmd_handler(conn *c) {
-   947603: 1453:    c->cmd = -1;
-   947603: 1454:    c->substate = bin_no_state;
-   947603: 1455:    if (c->item != NULL) {
+   948586: 1452:static void reset_cmd_handler(conn *c) {
+   948586: 1453:    c->cmd = -1;
+   948586: 1454:    c->substate = bin_no_state;
+   948586: 1455:    if (c->item != NULL) {
         -: 1456:        // TODO: Any other way to get here?
         -: 1457:        // SASL auth was mistakenly using it. Nothing else should?
     #####: 1458:        if (c->item_malloced) {
@@ -1467,35 +1467,35 @@
         -: 1463:        }
     #####: 1464:        c->item = NULL;
         -: 1465:    }
-   947603: 1466:    if (c->rbytes > 0) {
-   149948: 1467:        conn_set_state(c, conn_parse_cmd);
-   797655: 1468:    } else if (c->resp_head) {
-   340758: 1469:        conn_set_state(c, conn_mwrite);
+   948586: 1466:    if (c->rbytes > 0) {
+   148759: 1467:        conn_set_state(c, conn_parse_cmd);
+   799827: 1468:    } else if (c->resp_head) {
+   341843: 1469:        conn_set_state(c, conn_mwrite);
         -: 1470:    } else {
-   456897: 1471:        conn_set_state(c, conn_waiting);
+   457984: 1471:        conn_set_state(c, conn_waiting);
         -: 1472:    }
-   947603: 1473:}
+   948586: 1473:}
         -: 1474:
-   327308: 1475:static void complete_nread(conn *c) {
-  327308*: 1476:    assert(c != NULL);
+   327312: 1475:static void complete_nread(conn *c) {
+  327312*: 1476:    assert(c != NULL);
         -: 1477:#ifdef PROXY
         -: 1478:    assert(c->protocol == ascii_prot
         -: 1479:           || c->protocol == binary_prot
         -: 1480:           || c->protocol == proxy_prot);
         -: 1481:#else
-  327308*: 1482:    assert(c->protocol == ascii_prot
+  327312*: 1482:    assert(c->protocol == ascii_prot
         -: 1483:           || c->protocol == binary_prot);
         -: 1484:#endif
-   327308: 1485:    if (c->protocol == ascii_prot) {
+   327312: 1485:    if (c->protocol == ascii_prot) {
    302983: 1486:        complete_nread_ascii(c);
-    24325: 1487:    } else if (c->protocol == binary_prot) {
-    24325: 1488:        complete_nread_binary(c);
+    24329: 1487:    } else if (c->protocol == binary_prot) {
+    24329: 1488:        complete_nread_binary(c);
         -: 1489:#ifdef PROXY
         -: 1490:    } else if (c->protocol == proxy_prot) {
         -: 1491:        complete_nread_proxy(c);
         -: 1492:#endif
         -: 1493:    }
-   327308: 1494:}
+   327312: 1494:}
         -: 1495:
         -: 1496:/* Destination must always be chunked */
         -: 1497:/* This should be part of item.c */
@@ -1569,27 +1569,27 @@
         -: 1565:    return 0;
         -: 1566:}
         -: 1567:
-    16019: 1568:static int _store_item_copy_data(int comm, item *old_it, item *new_it, item *add_it) {
-    16019: 1569:    if (comm == NREAD_APPEND || comm == NREAD_APPENDVIV) {
-     8012: 1570:        if (new_it->it_flags & ITEM_CHUNKED) {
+    16017: 1568:static int _store_item_copy_data(int comm, item *old_it, item *new_it, item *add_it) {
+    16017: 1569:    if (comm == NREAD_APPEND || comm == NREAD_APPENDVIV) {
+     8009: 1570:        if (new_it->it_flags & ITEM_CHUNKED) {
     13516: 1571:            if (_store_item_copy_chunks(new_it, old_it, old_it->nbytes - 2) == -1 ||
      6758: 1572:                _store_item_copy_chunks(new_it, add_it, add_it->nbytes) == -1) {
     #####: 1573:                return -1;
         -: 1574:            }
         -: 1575:        } else {
-     1254: 1576:            memcpy(ITEM_data(new_it), ITEM_data(old_it), old_it->nbytes);
-     1254: 1577:            memcpy(ITEM_data(new_it) + old_it->nbytes - 2 /* CRLF */, ITEM_data(add_it), add_it->nbytes);
+     1251: 1576:            memcpy(ITEM_data(new_it), ITEM_data(old_it), old_it->nbytes);
+     1251: 1577:            memcpy(ITEM_data(new_it) + old_it->nbytes - 2 /* CRLF */, ITEM_data(add_it), add_it->nbytes);
         -: 1578:        }
         -: 1579:    } else {
         -: 1580:        /* NREAD_PREPEND */
-     8007: 1581:        if (new_it->it_flags & ITEM_CHUNKED) {
+     8008: 1581:        if (new_it->it_flags & ITEM_CHUNKED) {
     13516: 1582:            if (_store_item_copy_chunks(new_it, add_it, add_it->nbytes - 2) == -1 ||
      6758: 1583:                _store_item_copy_chunks(new_it, old_it, old_it->nbytes) == -1) {
     #####: 1584:                return -1;
         -: 1585:            }
         -: 1586:        } else {
-     1249: 1587:            memcpy(ITEM_data(new_it), ITEM_data(add_it), add_it->nbytes);
-     1249: 1588:            memcpy(ITEM_data(new_it) + add_it->nbytes - 2 /* CRLF */, ITEM_data(old_it), old_it->nbytes);
+     1250: 1587:            memcpy(ITEM_data(new_it), ITEM_data(add_it), add_it->nbytes);
+     1250: 1588:            memcpy(ITEM_data(new_it) + add_it->nbytes - 2 /* CRLF */, ITEM_data(old_it), old_it->nbytes);
         -: 1589:        }
         -: 1590:    }
         -: 1591:    return 0;
@@ -1601,25 +1601,25 @@
         -: 1597: *
         -: 1598: * Returns the state of storage.
         -: 1599: */
-   327377: 1600:enum store_item_type do_store_item(item *it, int comm, LIBEVENT_THREAD *t, const uint32_t hv, int *nbytes, uint64_t *cas, bool cas_stale) {
-   327377: 1601:    char *key = ITEM_key(it);
-   327377: 1602:    item *old_it = do_item_get(key, it->nkey, hv, t, DONT_UPDATE);
-   327377: 1603:    enum store_item_type stored = NOT_STORED;
+   327373: 1600:enum store_item_type do_store_item(item *it, int comm, LIBEVENT_THREAD *t, const uint32_t hv, int *nbytes, uint64_t *cas, bool cas_stale) {
+   327373: 1601:    char *key = ITEM_key(it);
+   327373: 1602:    item *old_it = do_item_get(key, it->nkey, hv, t, DONT_UPDATE);
+   327373: 1603:    enum store_item_type stored = NOT_STORED;
         -: 1604:
-   327377: 1605:    enum cas_result { CAS_NONE, CAS_MATCH, CAS_BADVAL, CAS_STALE, CAS_MISS };
+   327373: 1605:    enum cas_result { CAS_NONE, CAS_MATCH, CAS_BADVAL, CAS_STALE, CAS_MISS };
         -: 1606:
-   327377: 1607:    item *new_it = NULL;
-   327377: 1608:    client_flags_t flags;
+   327373: 1607:    item *new_it = NULL;
+   327373: 1608:    client_flags_t flags;
         -: 1609:
         -: 1610:    /* Do the CAS test up front so we can apply to all store modes */
-   327377: 1611:    enum cas_result cas_res = CAS_NONE;
+   327373: 1611:    enum cas_result cas_res = CAS_NONE;
         -: 1612:
-   327377: 1613:    bool do_store = false;
-   327377: 1614:    if (old_it != NULL) {
+   327373: 1613:    bool do_store = false;
+   327373: 1614:    if (old_it != NULL) {
         -: 1615:        // Most of the CAS work requires something to compare to.
-    36517: 1616:        uint64_t it_cas = ITEM_get_cas(it);
-    36517: 1617:        uint64_t old_cas = ITEM_get_cas(old_it);
-    36517: 1618:        if (it_cas == 0) {
+    36514: 1616:        uint64_t it_cas = ITEM_get_cas(it);
+    36514: 1617:        uint64_t old_cas = ITEM_get_cas(old_it);
+    36514: 1618:        if (it_cas == 0) {
         -: 1619:            cas_res = CAS_NONE;
        21: 1620:        } else if (it_cas == old_cas) {
         -: 1621:            cas_res = CAS_MATCH;
@@ -1629,11 +1629,11 @@
         8: 1625:            cas_res = CAS_BADVAL;
         -: 1626:        }
         -: 1627:
-    36517: 1628:        switch (comm) {
-      649: 1629:            case NREAD_ADD:
+    36514: 1628:        switch (comm) {
+      648: 1629:            case NREAD_ADD:
         -: 1630:                /* add only adds a nonexistent item, but promote to head of LRU */
-      649: 1631:                do_item_update(old_it);
-      649: 1632:                break;
+      648: 1631:                do_item_update(old_it);
+      648: 1632:                break;
        22: 1633:            case NREAD_CAS:
        22: 1634:                if (cas_res == CAS_MATCH) {
         -: 1635:                    // cas validates
@@ -1672,39 +1672,39 @@
         -: 1668:                    stored = EXISTS;
         -: 1669:                }
         -: 1670:                break;
-    16021: 1671:            case NREAD_APPEND:
+    16019: 1671:            case NREAD_APPEND:
         -: 1672:            case NREAD_PREPEND:
         -: 1673:            case NREAD_APPENDVIV:
         -: 1674:            case NREAD_PREPENDVIV:
-    16021: 1675:                if (cas_res != CAS_NONE && cas_res != CAS_MATCH) {
+    16019: 1675:                if (cas_res != CAS_NONE && cas_res != CAS_MATCH) {
         -: 1676:                    stored = EXISTS;
         -: 1677:                    break;
         -: 1678:                }
         -: 1679:#ifdef EXTSTORE
-    16021: 1680:                if ((old_it->it_flags & ITEM_HDR) != 0) {
+    16019: 1680:                if ((old_it->it_flags & ITEM_HDR) != 0) {
         -: 1681:                    /* block append/prepend from working with extstore-d items.
         -: 1682:                     * leave response code to NOT_STORED default */
         -: 1683:                    break;
         -: 1684:                }
         -: 1685:#endif
         -: 1686:                /* we have it and old_it here - alloc memory to hold both */
-    16019: 1687:                FLAGS_CONV(old_it, flags);
-    16019: 1688:                new_it = do_item_alloc(key, it->nkey, flags, old_it->exptime, it->nbytes + old_it->nbytes - 2 /* CRLF */);
+    16017: 1687:                FLAGS_CONV(old_it, flags);
+    16017: 1688:                new_it = do_item_alloc(key, it->nkey, flags, old_it->exptime, it->nbytes + old_it->nbytes - 2 /* CRLF */);
         -: 1689:
         -: 1690:                // OOM trying to copy.
-    16019: 1691:                if (new_it == NULL)
+    16017: 1691:                if (new_it == NULL)
         -: 1692:                    break;
         -: 1693:                /* copy data from it and old_it to new_it */
-    16019: 1694:                if (_store_item_copy_data(comm, old_it, new_it, it) == -1) {
+    16017: 1694:                if (_store_item_copy_data(comm, old_it, new_it, it) == -1) {
         -: 1695:                    // failed data copy
         -: 1696:                    break;
         -: 1697:                } else {
         -: 1698:                    // refcount of new_it is 1 here. will end up 2 after link.
         -: 1699:                    // it's original ref is managed outside of this function
-    16019: 1700:                    it = new_it;
-    16019: 1701:                    do_store = true;
+    16017: 1700:                    it = new_it;
+    16017: 1701:                    do_store = true;
         -: 1702:                    // Upstream final object size for meta
-    16019: 1703:                    if (nbytes != NULL) {
+    16017: 1703:                    if (nbytes != NULL) {
     16008: 1704:                        *nbytes = it->nbytes;
         -: 1705:                    }
         -: 1706:                }
@@ -1715,31 +1715,31 @@
     19825: 1711:                break;
         -: 1712:        }
         -: 1713:
-   36517*: 1714:        if (do_store) {
-    35856: 1715:            STORAGE_delete(t->storage, old_it);
-    35856: 1716:            item_replace(old_it, it, hv);
-    35856: 1717:            stored = STORED;
+   36514*: 1714:        if (do_store) {
+    35854: 1715:            STORAGE_delete(t->storage, old_it);
+    35854: 1716:            item_replace(old_it, it, hv);
+    35854: 1717:            stored = STORED;
         -: 1718:        }
         -: 1719:
-    36517: 1720:        do_item_remove(old_it);         /* release our reference */
-    36517: 1721:        if (new_it != NULL) {
+    36514: 1720:        do_item_remove(old_it);         /* release our reference */
+    36514: 1721:        if (new_it != NULL) {
         -: 1722:            // append/prepend end up with an extra reference for new_it.
-    16019: 1723:            do_item_remove(new_it);
+    16017: 1723:            do_item_remove(new_it);
         -: 1724:        }
         -: 1725:    } else {
         -: 1726:        /* No pre-existing item to replace or compare to. */
-   290860: 1727:        if (ITEM_get_cas(it) != 0) {
+   290859: 1727:        if (ITEM_get_cas(it) != 0) {
         -: 1728:            /* Asked for a CAS match but nothing to compare it to. */
-   290860: 1729:            cas_res = CAS_MISS;
+   290859: 1729:            cas_res = CAS_MISS;
         -: 1730:        }
         -: 1731:
-   290860: 1732:        switch (comm) {
+   290859: 1732:        switch (comm) {
         -: 1733:            case NREAD_ADD:
         -: 1734:            case NREAD_SET:
         -: 1735:            case NREAD_APPENDVIV:
         -: 1736:            case NREAD_PREPENDVIV:
-   290773: 1737:                do_store = true;
-   290773: 1738:                break;
+   290765: 1737:                do_store = true;
+   290765: 1738:                break;
         3: 1739:            case NREAD_CAS:
         -: 1740:                // LRU expired
         3: 1741:                stored = NOT_FOUND;
@@ -1755,98 +1755,98 @@
         -: 1751:        }
         -: 1752:
         3: 1753:        if (do_store) {
-   290773: 1754:            do_item_link(it, hv);
-   290773: 1755:            stored = STORED;
+   290765: 1754:            do_item_link(it, hv);
+   290765: 1755:            stored = STORED;
         -: 1756:        }
         -: 1757:    }
         -: 1758:
-   327377: 1759:    if (stored == STORED && cas != NULL) {
-   326626: 1760:        *cas = ITEM_get_cas(it);
+   327373: 1759:    if (stored == STORED && cas != NULL) {
+   326616: 1760:        *cas = ITEM_get_cas(it);
         -: 1761:    }
-  327377*: 1762:    LOGGER_LOG(t->l, LOG_MUTATIONS, LOGGER_ITEM_STORE, NULL,
+  327373*: 1762:    LOGGER_LOG(t->l, LOG_MUTATIONS, LOGGER_ITEM_STORE, NULL,
         -: 1763:            stored, comm, ITEM_key(it), it->nkey, it->nbytes, it->exptime,
         -: 1764:            ITEM_clsid(it), t->cur_sfd);
         -: 1765:
-   327377: 1766:    return stored;
+   327373: 1766:    return stored;
         -: 1767:}
         -: 1768:
         -: 1769:/* set up a connection to write a buffer then free it, used for stats */
-     5415: 1770:void write_and_free(conn *c, char *buf, int bytes) {
-     5415: 1771:    if (buf) {
-     5415: 1772:        mc_resp *resp = c->resp;
-     5415: 1773:        resp->write_and_free = buf;
-     5415: 1774:        resp_add_iov(resp, buf, bytes);
-     5415: 1775:        conn_set_state(c, conn_new_cmd);
+     5397: 1770:void write_and_free(conn *c, char *buf, int bytes) {
+     5397: 1771:    if (buf) {
+     5397: 1772:        mc_resp *resp = c->resp;
+     5397: 1773:        resp->write_and_free = buf;
+     5397: 1774:        resp_add_iov(resp, buf, bytes);
+     5397: 1775:        conn_set_state(c, conn_new_cmd);
         -: 1776:    } else {
     #####: 1777:        out_of_memory(c, "SERVER_ERROR out of memory writing stats");
         -: 1778:    }
-     5415: 1779:}
+     5397: 1779:}
         -: 1780:
-   376644: 1781:void append_stat(const char *name, ADD_STAT add_stats, conn *c,
+   374912: 1781:void append_stat(const char *name, ADD_STAT add_stats, conn *c,
         -: 1782:                 const char *fmt, ...) {
-   376644: 1783:    char val_str[STAT_VAL_LEN];
-   376644: 1784:    int vlen;
-   376644: 1785:    va_list ap;
+   374912: 1783:    char val_str[STAT_VAL_LEN];
+   374912: 1784:    int vlen;
+   374912: 1785:    va_list ap;
         -: 1786:
-  376644*: 1787:    assert(name);
-  376644*: 1788:    assert(add_stats);
-  376644*: 1789:    assert(c);
-  376644*: 1790:    assert(fmt);
+  374912*: 1787:    assert(name);
+  374912*: 1788:    assert(add_stats);
+  374912*: 1789:    assert(c);
+  374912*: 1790:    assert(fmt);
         -: 1791:
-   376644: 1792:    va_start(ap, fmt);
-   376644: 1793:    vlen = vsnprintf(val_str, sizeof(val_str) - 1, fmt, ap);
-   376644: 1794:    va_end(ap);
+   374912: 1792:    va_start(ap, fmt);
+   374912: 1793:    vlen = vsnprintf(val_str, sizeof(val_str) - 1, fmt, ap);
+   374912: 1794:    va_end(ap);
         -: 1795:
-   376644: 1796:    add_stats(name, strlen(name), val_str, vlen, c);
-   376644: 1797:}
+   374912: 1796:    add_stats(name, strlen(name), val_str, vlen, c);
+   374912: 1797:}
         -: 1798:
         -: 1799:/* return server specific stats only */
-     3797: 1800:void server_stats(ADD_STAT add_stats, conn *c) {
-     3797: 1801:    pid_t pid = getpid();
-     3797: 1802:    rel_time_t now = current_time;
+     3778: 1800:void server_stats(ADD_STAT add_stats, conn *c) {
+     3778: 1801:    pid_t pid = getpid();
+     3778: 1802:    rel_time_t now = current_time;
         -: 1803:
-     3797: 1804:    struct thread_stats thread_stats;
-     3797: 1805:    threadlocal_stats_aggregate(&thread_stats);
-     3797: 1806:    struct slab_stats slab_stats;
-     3797: 1807:    slab_stats_aggregate(&thread_stats, &slab_stats);
+     3778: 1804:    struct thread_stats thread_stats;
+     3778: 1805:    threadlocal_stats_aggregate(&thread_stats);
+     3778: 1806:    struct slab_stats slab_stats;
+     3778: 1807:    slab_stats_aggregate(&thread_stats, &slab_stats);
         -: 1808:#ifndef WIN32
-     3797: 1809:    struct rusage usage;
-     3797: 1810:    getrusage(RUSAGE_SELF, &usage);
+     3778: 1809:    struct rusage usage;
+     3778: 1810:    getrusage(RUSAGE_SELF, &usage);
         -: 1811:#endif /* !WIN32 */
         -: 1812:
-     3797: 1813:    STATS_LOCK();
+     3778: 1813:    STATS_LOCK();
         -: 1814:
-     3797: 1815:    APPEND_STAT("pid", "%lu", (long)pid);
-     3797: 1816:    APPEND_STAT("uptime", "%u", now - ITEM_UPDATE_INTERVAL);
-     3797: 1817:    APPEND_STAT("time", "%ld", now + (long)process_started);
-     3797: 1818:    APPEND_STAT("version", "%s", VERSION);
-     3797: 1819:    APPEND_STAT("libevent", "%s", event_get_version());
-     3797: 1820:    APPEND_STAT("pointer_size", "%d", (int)(8 * sizeof(void *)));
+     3778: 1815:    APPEND_STAT("pid", "%lu", (long)pid);
+     3778: 1816:    APPEND_STAT("uptime", "%u", now - ITEM_UPDATE_INTERVAL);
+     3778: 1817:    APPEND_STAT("time", "%ld", now + (long)process_started);
+     3778: 1818:    APPEND_STAT("version", "%s", VERSION);
+     3778: 1819:    APPEND_STAT("libevent", "%s", event_get_version());
+     3778: 1820:    APPEND_STAT("pointer_size", "%d", (int)(8 * sizeof(void *)));
         -: 1821:
         -: 1822:#ifndef WIN32
-     3797: 1823:    append_stat("rusage_user", add_stats, c, "%ld.%06ld",
-     3797: 1824:                (long)usage.ru_utime.tv_sec,
-     3797: 1825:                (long)usage.ru_utime.tv_usec);
-     3797: 1826:    append_stat("rusage_system", add_stats, c, "%ld.%06ld",
-     3797: 1827:                (long)usage.ru_stime.tv_sec,
-     3797: 1828:                (long)usage.ru_stime.tv_usec);
+     3778: 1823:    append_stat("rusage_user", add_stats, c, "%ld.%06ld",
+     3778: 1824:                (long)usage.ru_utime.tv_sec,
+     3778: 1825:                (long)usage.ru_utime.tv_usec);
+     3778: 1826:    append_stat("rusage_system", add_stats, c, "%ld.%06ld",
+     3778: 1827:                (long)usage.ru_stime.tv_sec,
+     3778: 1828:                (long)usage.ru_stime.tv_usec);
         -: 1829:#endif /* !WIN32 */
         -: 1830:
-     3797: 1831:    APPEND_STAT("max_connections", "%d", settings.maxconns);
-     3797: 1832:    APPEND_STAT("curr_connections", "%llu", (unsigned long long)stats_state.curr_conns - 1);
-     3797: 1833:    APPEND_STAT("total_connections", "%llu", (unsigned long long)stats.total_conns);
-     3797: 1834:    if (settings.maxconns_fast) {
-     3786: 1835:        APPEND_STAT("rejected_connections", "%llu", (unsigned long long)stats.rejected_conns);
+     3778: 1831:    APPEND_STAT("max_connections", "%d", settings.maxconns);
+     3778: 1832:    APPEND_STAT("curr_connections", "%llu", (unsigned long long)stats_state.curr_conns - 1);
+     3778: 1833:    APPEND_STAT("total_connections", "%llu", (unsigned long long)stats.total_conns);
+     3778: 1834:    if (settings.maxconns_fast) {
+     3768: 1835:        APPEND_STAT("rejected_connections", "%llu", (unsigned long long)stats.rejected_conns);
         -: 1836:    }
-     3797: 1837:    APPEND_STAT("connection_structures", "%u", stats_state.conn_structs);
-     3797: 1838:    APPEND_STAT("response_obj_oom", "%llu", (unsigned long long)thread_stats.response_obj_oom);
-     3797: 1839:    APPEND_STAT("response_obj_count", "%llu", (unsigned long long)thread_stats.response_obj_count);
-     3797: 1840:    APPEND_STAT("response_obj_bytes", "%llu", (unsigned long long)thread_stats.response_obj_bytes);
-     3797: 1841:    APPEND_STAT("read_buf_count", "%llu", (unsigned long long)thread_stats.read_buf_count);
-     3797: 1842:    APPEND_STAT("read_buf_bytes", "%llu", (unsigned long long)thread_stats.read_buf_bytes);
-     3797: 1843:    APPEND_STAT("read_buf_bytes_free", "%llu", (unsigned long long)thread_stats.read_buf_bytes_free);
-     3797: 1844:    APPEND_STAT("read_buf_oom", "%llu", (unsigned long long)thread_stats.read_buf_oom);
-     3797: 1845:    APPEND_STAT("reserved_fds", "%u", stats_state.reserved_fds);
+     3778: 1837:    APPEND_STAT("connection_structures", "%u", stats_state.conn_structs);
+     3778: 1838:    APPEND_STAT("response_obj_oom", "%llu", (unsigned long long)thread_stats.response_obj_oom);
+     3778: 1839:    APPEND_STAT("response_obj_count", "%llu", (unsigned long long)thread_stats.response_obj_count);
+     3778: 1840:    APPEND_STAT("response_obj_bytes", "%llu", (unsigned long long)thread_stats.response_obj_bytes);
+     3778: 1841:    APPEND_STAT("read_buf_count", "%llu", (unsigned long long)thread_stats.read_buf_count);
+     3778: 1842:    APPEND_STAT("read_buf_bytes", "%llu", (unsigned long long)thread_stats.read_buf_bytes);
+     3778: 1843:    APPEND_STAT("read_buf_bytes_free", "%llu", (unsigned long long)thread_stats.read_buf_bytes_free);
+     3778: 1844:    APPEND_STAT("read_buf_oom", "%llu", (unsigned long long)thread_stats.read_buf_oom);
+     3778: 1845:    APPEND_STAT("reserved_fds", "%u", stats_state.reserved_fds);
         -: 1846:#ifdef PROXY
         -: 1847:    if (settings.proxy_enabled) {
         -: 1848:        APPEND_STAT("proxy_conn_requests", "%llu", (unsigned long long)thread_stats.proxy_conn_requests);
@@ -1856,17 +1856,17 @@
         -: 1852:        APPEND_STAT("proxy_await_active", "%llu", (unsigned long long)thread_stats.proxy_await_active);
         -: 1853:    }
         -: 1854:#endif
-     3797: 1855:    APPEND_STAT("cmd_get", "%llu", (unsigned long long)thread_stats.get_cmds);
-     3797: 1856:    APPEND_STAT("cmd_set", "%llu", (unsigned long long)slab_stats.set_cmds);
-     3797: 1857:    APPEND_STAT("cmd_flush", "%llu", (unsigned long long)thread_stats.flush_cmds);
-     3797: 1858:    APPEND_STAT("cmd_touch", "%llu", (unsigned long long)thread_stats.touch_cmds);
-     3797: 1859:    APPEND_STAT("cmd_meta", "%llu", (unsigned long long)thread_stats.meta_cmds);
-     3797: 1860:    APPEND_STAT("get_hits", "%llu", (unsigned long long)slab_stats.get_hits);
-     3797: 1861:    APPEND_STAT("get_misses", "%llu", (unsigned long long)thread_stats.get_misses);
-     3797: 1862:    APPEND_STAT("get_expired", "%llu", (unsigned long long)thread_stats.get_expired);
-     3797: 1863:    APPEND_STAT("get_flushed", "%llu", (unsigned long long)thread_stats.get_flushed);
+     3778: 1855:    APPEND_STAT("cmd_get", "%llu", (unsigned long long)thread_stats.get_cmds);
+     3778: 1856:    APPEND_STAT("cmd_set", "%llu", (unsigned long long)slab_stats.set_cmds);
+     3778: 1857:    APPEND_STAT("cmd_flush", "%llu", (unsigned long long)thread_stats.flush_cmds);
+     3778: 1858:    APPEND_STAT("cmd_touch", "%llu", (unsigned long long)thread_stats.touch_cmds);
+     3778: 1859:    APPEND_STAT("cmd_meta", "%llu", (unsigned long long)thread_stats.meta_cmds);
+     3778: 1860:    APPEND_STAT("get_hits", "%llu", (unsigned long long)slab_stats.get_hits);
+     3778: 1861:    APPEND_STAT("get_misses", "%llu", (unsigned long long)thread_stats.get_misses);
+     3778: 1862:    APPEND_STAT("get_expired", "%llu", (unsigned long long)thread_stats.get_expired);
+     3778: 1863:    APPEND_STAT("get_flushed", "%llu", (unsigned long long)thread_stats.get_flushed);
         -: 1864:#ifdef EXTSTORE
-     3797: 1865:    if (c->thread->storage) {
+     3778: 1865:    if (c->thread->storage) {
      1049: 1866:        APPEND_STAT("get_extstore", "%llu", (unsigned long long)thread_stats.get_extstore);
      1049: 1867:        APPEND_STAT("get_aborted_extstore", "%llu", (unsigned long long)thread_stats.get_aborted_extstore);
      1049: 1868:        APPEND_STAT("get_oom_extstore", "%llu", (unsigned long long)thread_stats.get_oom_extstore);
@@ -1875,62 +1875,62 @@
      1049: 1871:        APPEND_STAT("badcrc_from_extstore", "%llu", (unsigned long long)thread_stats.badcrc_from_extstore);
         -: 1872:    }
         -: 1873:#endif
-     3797: 1874:    APPEND_STAT("delete_misses", "%llu", (unsigned long long)thread_stats.delete_misses);
-     3797: 1875:    APPEND_STAT("delete_hits", "%llu", (unsigned long long)slab_stats.delete_hits);
-     3797: 1876:    APPEND_STAT("incr_misses", "%llu", (unsigned long long)thread_stats.incr_misses);
-     3797: 1877:    APPEND_STAT("incr_hits", "%llu", (unsigned long long)slab_stats.incr_hits);
-     3797: 1878:    APPEND_STAT("decr_misses", "%llu", (unsigned long long)thread_stats.decr_misses);
-     3797: 1879:    APPEND_STAT("decr_hits", "%llu", (unsigned long long)slab_stats.decr_hits);
-     3797: 1880:    APPEND_STAT("cas_misses", "%llu", (unsigned long long)thread_stats.cas_misses);
-     3797: 1881:    APPEND_STAT("cas_hits", "%llu", (unsigned long long)slab_stats.cas_hits);
-     3797: 1882:    APPEND_STAT("cas_badval", "%llu", (unsigned long long)slab_stats.cas_badval);
-     3797: 1883:    APPEND_STAT("touch_hits", "%llu", (unsigned long long)slab_stats.touch_hits);
-     3797: 1884:    APPEND_STAT("touch_misses", "%llu", (unsigned long long)thread_stats.touch_misses);
-     3797: 1885:    APPEND_STAT("store_too_large", "%llu", (unsigned long long)thread_stats.store_too_large);
-     3797: 1886:    APPEND_STAT("store_no_memory", "%llu", (unsigned long long)thread_stats.store_no_memory);
-     3797: 1887:    APPEND_STAT("auth_cmds", "%llu", (unsigned long long)thread_stats.auth_cmds);
-     3797: 1888:    APPEND_STAT("auth_errors", "%llu", (unsigned long long)thread_stats.auth_errors);
-     3797: 1889:    if (settings.idle_timeout) {
+     3778: 1874:    APPEND_STAT("delete_misses", "%llu", (unsigned long long)thread_stats.delete_misses);
+     3778: 1875:    APPEND_STAT("delete_hits", "%llu", (unsigned long long)slab_stats.delete_hits);
+     3778: 1876:    APPEND_STAT("incr_misses", "%llu", (unsigned long long)thread_stats.incr_misses);
+     3778: 1877:    APPEND_STAT("incr_hits", "%llu", (unsigned long long)slab_stats.incr_hits);
+     3778: 1878:    APPEND_STAT("decr_misses", "%llu", (unsigned long long)thread_stats.decr_misses);
+     3778: 1879:    APPEND_STAT("decr_hits", "%llu", (unsigned long long)slab_stats.decr_hits);
+     3778: 1880:    APPEND_STAT("cas_misses", "%llu", (unsigned long long)thread_stats.cas_misses);
+     3778: 1881:    APPEND_STAT("cas_hits", "%llu", (unsigned long long)slab_stats.cas_hits);
+     3778: 1882:    APPEND_STAT("cas_badval", "%llu", (unsigned long long)slab_stats.cas_badval);
+     3778: 1883:    APPEND_STAT("touch_hits", "%llu", (unsigned long long)slab_stats.touch_hits);
+     3778: 1884:    APPEND_STAT("touch_misses", "%llu", (unsigned long long)thread_stats.touch_misses);
+     3778: 1885:    APPEND_STAT("store_too_large", "%llu", (unsigned long long)thread_stats.store_too_large);
+     3778: 1886:    APPEND_STAT("store_no_memory", "%llu", (unsigned long long)thread_stats.store_no_memory);
+     3778: 1887:    APPEND_STAT("auth_cmds", "%llu", (unsigned long long)thread_stats.auth_cmds);
+     3778: 1888:    APPEND_STAT("auth_errors", "%llu", (unsigned long long)thread_stats.auth_errors);
+     3778: 1889:    if (settings.idle_timeout) {
         9: 1890:        APPEND_STAT("idle_kicks", "%llu", (unsigned long long)thread_stats.idle_kicks);
         -: 1891:    }
-     3797: 1892:    APPEND_STAT("bytes_read", "%llu", (unsigned long long)thread_stats.bytes_read);
-     3797: 1893:    APPEND_STAT("bytes_written", "%llu", (unsigned long long)thread_stats.bytes_written);
-     3797: 1894:    APPEND_STAT("limit_maxbytes", "%llu", (unsigned long long)settings.maxbytes);
-     3797: 1895:    APPEND_STAT("accepting_conns", "%u", stats_state.accepting_conns);
-     3797: 1896:    APPEND_STAT("listen_disabled_num", "%llu", (unsigned long long)stats.listen_disabled_num);
-     3797: 1897:    APPEND_STAT("time_in_listen_disabled_us", "%llu", stats.time_in_listen_disabled_us);
-     3797: 1898:    APPEND_STAT("threads", "%d", settings.num_threads);
-     3797: 1899:    APPEND_STAT("conn_yields", "%llu", (unsigned long long)thread_stats.conn_yields);
-     3797: 1900:    APPEND_STAT("hash_power_level", "%u", stats_state.hash_power_level);
-     3797: 1901:    APPEND_STAT("hash_bytes", "%llu", (unsigned long long)stats_state.hash_bytes);
-     3797: 1902:    APPEND_STAT("hash_is_expanding", "%u", stats_state.hash_is_expanding);
-     3797: 1903:    if (settings.slab_reassign) {
-     3786: 1904:        APPEND_STAT("slab_reassign_rescues", "%llu", stats.slab_reassign_rescues);
-     3786: 1905:        APPEND_STAT("slab_reassign_chunk_rescues", "%llu", stats.slab_reassign_chunk_rescues);
-     3786: 1906:        APPEND_STAT("slab_reassign_evictions_nomem", "%llu", stats.slab_reassign_evictions_nomem);
-     3786: 1907:        APPEND_STAT("slab_reassign_inline_reclaim", "%llu", stats.slab_reassign_inline_reclaim);
-     3786: 1908:        APPEND_STAT("slab_reassign_busy_items", "%llu", stats.slab_reassign_busy_items);
-     3786: 1909:        APPEND_STAT("slab_reassign_busy_deletes", "%llu", stats.slab_reassign_busy_deletes);
-     3786: 1910:        APPEND_STAT("slab_reassign_running", "%u", stats_state.slab_reassign_running);
-     3786: 1911:        APPEND_STAT("slabs_moved", "%llu", stats.slabs_moved);
+     3778: 1892:    APPEND_STAT("bytes_read", "%llu", (unsigned long long)thread_stats.bytes_read);
+     3778: 1893:    APPEND_STAT("bytes_written", "%llu", (unsigned long long)thread_stats.bytes_written);
+     3778: 1894:    APPEND_STAT("limit_maxbytes", "%llu", (unsigned long long)settings.maxbytes);
+     3778: 1895:    APPEND_STAT("accepting_conns", "%u", stats_state.accepting_conns);
+     3778: 1896:    APPEND_STAT("listen_disabled_num", "%llu", (unsigned long long)stats.listen_disabled_num);
+     3778: 1897:    APPEND_STAT("time_in_listen_disabled_us", "%llu", stats.time_in_listen_disabled_us);
+     3778: 1898:    APPEND_STAT("threads", "%d", settings.num_threads);
+     3778: 1899:    APPEND_STAT("conn_yields", "%llu", (unsigned long long)thread_stats.conn_yields);
+     3778: 1900:    APPEND_STAT("hash_power_level", "%u", stats_state.hash_power_level);
+     3778: 1901:    APPEND_STAT("hash_bytes", "%llu", (unsigned long long)stats_state.hash_bytes);
+     3778: 1902:    APPEND_STAT("hash_is_expanding", "%u", stats_state.hash_is_expanding);
+     3778: 1903:    if (settings.slab_reassign) {
+     3768: 1904:        APPEND_STAT("slab_reassign_rescues", "%llu", stats.slab_reassign_rescues);
+     3768: 1905:        APPEND_STAT("slab_reassign_chunk_rescues", "%llu", stats.slab_reassign_chunk_rescues);
+     3768: 1906:        APPEND_STAT("slab_reassign_evictions_nomem", "%llu", stats.slab_reassign_evictions_nomem);
+     3768: 1907:        APPEND_STAT("slab_reassign_inline_reclaim", "%llu", stats.slab_reassign_inline_reclaim);
+     3768: 1908:        APPEND_STAT("slab_reassign_busy_items", "%llu", stats.slab_reassign_busy_items);
+     3768: 1909:        APPEND_STAT("slab_reassign_busy_deletes", "%llu", stats.slab_reassign_busy_deletes);
+     3768: 1910:        APPEND_STAT("slab_reassign_running", "%u", stats_state.slab_reassign_running);
+     3768: 1911:        APPEND_STAT("slabs_moved", "%llu", stats.slabs_moved);
         -: 1912:    }
-     3797: 1913:    if (settings.lru_crawler) {
-     3763: 1914:        APPEND_STAT("lru_crawler_running", "%u", stats_state.lru_crawler_running);
-     3763: 1915:        APPEND_STAT("lru_crawler_starts", "%u", stats.lru_crawler_starts);
+     3778: 1913:    if (settings.lru_crawler) {
+     3744: 1914:        APPEND_STAT("lru_crawler_running", "%u", stats_state.lru_crawler_running);
+     3744: 1915:        APPEND_STAT("lru_crawler_starts", "%u", stats.lru_crawler_starts);
         -: 1916:    }
-     3797: 1917:    if (settings.lru_maintainer_thread) {
-     3770: 1918:        APPEND_STAT("lru_maintainer_juggles", "%llu", (unsigned long long)stats.lru_maintainer_juggles);
+     3778: 1917:    if (settings.lru_maintainer_thread) {
+     3752: 1918:        APPEND_STAT("lru_maintainer_juggles", "%llu", (unsigned long long)stats.lru_maintainer_juggles);
         -: 1919:    }
-     3797: 1920:    APPEND_STAT("malloc_fails", "%llu",
-     3797: 1921:                (unsigned long long)stats.malloc_fails);
-     3797: 1922:    APPEND_STAT("log_worker_dropped", "%llu", (unsigned long long)stats.log_worker_dropped);
-     3797: 1923:    APPEND_STAT("log_worker_written", "%llu", (unsigned long long)stats.log_worker_written);
-     3797: 1924:    APPEND_STAT("log_watcher_skipped", "%llu", (unsigned long long)stats.log_watcher_skipped);
-     3797: 1925:    APPEND_STAT("log_watcher_sent", "%llu", (unsigned long long)stats.log_watcher_sent);
-     3797: 1926:    APPEND_STAT("log_watchers", "%llu", (unsigned long long)stats_state.log_watchers);
-     3797: 1927:    STATS_UNLOCK();
+     3778: 1920:    APPEND_STAT("malloc_fails", "%llu",
+     3778: 1921:                (unsigned long long)stats.malloc_fails);
+     3778: 1922:    APPEND_STAT("log_worker_dropped", "%llu", (unsigned long long)stats.log_worker_dropped);
+     3778: 1923:    APPEND_STAT("log_worker_written", "%llu", (unsigned long long)stats.log_worker_written);
+     3778: 1924:    APPEND_STAT("log_watcher_skipped", "%llu", (unsigned long long)stats.log_watcher_skipped);
+     3778: 1925:    APPEND_STAT("log_watcher_sent", "%llu", (unsigned long long)stats.log_watcher_sent);
+     3778: 1926:    APPEND_STAT("log_watchers", "%llu", (unsigned long long)stats_state.log_watchers);
+     3778: 1927:    STATS_UNLOCK();
         -: 1928:#ifdef EXTSTORE
-     3797: 1929:    storage_stats(add_stats, c);
+     3778: 1929:    storage_stats(add_stats, c);
         -: 1930:#endif
         -: 1931:#ifdef PROXY
         -: 1932:    proxy_stats(settings.proxy_ctx, add_stats, c);
@@ -1944,9 +1944,9 @@
         -: 1940:        APPEND_STAT("time_since_server_cert_refresh", "%u", now - settings.ssl_last_cert_refresh_time);
         -: 1941:    }
         -: 1942:#endif
-     3797: 1943:    APPEND_STAT("unexpected_napi_ids", "%llu", (unsigned long long)stats.unexpected_napi_ids);
-     3797: 1944:    APPEND_STAT("round_robin_fallback", "%llu", (unsigned long long)stats.round_robin_fallback);
-     3797: 1945:}
+     3778: 1943:    APPEND_STAT("unexpected_napi_ids", "%llu", (unsigned long long)stats.unexpected_napi_ids);
+     3778: 1944:    APPEND_STAT("round_robin_fallback", "%llu", (unsigned long long)stats.round_robin_fallback);
+     3778: 1945:}
         -: 1946:
        21: 1947:void process_stat_settings(ADD_STAT add_stats, void *c) {
       21*: 1948:    assert(add_stats);
@@ -2044,26 +2044,26 @@
        21: 2040:    APPEND_STAT("client_flags_size", "%d", sizeof(client_flags_t));
        21: 2041:}
         -: 2042:
-     1609: 2043:static int nz_strcmp(int nzlength, const char *nz, const char *z) {
-     1609: 2044:    int zlength=strlen(z);
-     1609: 2045:    return (zlength == nzlength) && (strncmp(nz, z, zlength) == 0) ? 0 : -1;
+     1610: 2043:static int nz_strcmp(int nzlength, const char *nz, const char *z) {
+     1610: 2044:    int zlength=strlen(z);
+     1610: 2045:    return (zlength == nzlength) && (strncmp(nz, z, zlength) == 0) ? 0 : -1;
         -: 2046:}
         -: 2047:
-     5378: 2048:bool get_stats(const char *stat_type, int nkey, ADD_STAT add_stats, void *c) {
-     5378: 2049:    bool ret = true;
+     5360: 2048:bool get_stats(const char *stat_type, int nkey, ADD_STAT add_stats, void *c) {
+     5360: 2049:    bool ret = true;
         -: 2050:
-     5378: 2051:    if (add_stats != NULL) {
-     5378: 2052:        if (!stat_type) {
+     5360: 2051:    if (add_stats != NULL) {
+     5360: 2052:        if (!stat_type) {
         -: 2053:            /* prepare general statistics for the engine */
-     3797: 2054:            STATS_LOCK();
-     3797: 2055:            APPEND_STAT("bytes", "%llu", (unsigned long long)stats_state.curr_bytes);
-     3797: 2056:            APPEND_STAT("curr_items", "%llu", (unsigned long long)stats_state.curr_items);
-     3797: 2057:            APPEND_STAT("total_items", "%llu", (unsigned long long)stats.total_items);
-     3797: 2058:            STATS_UNLOCK();
-     3797: 2059:            APPEND_STAT("slab_global_page_pool", "%u", global_page_pool_size(NULL));
-     3797: 2060:            item_stats_totals(add_stats, c);
-     1581: 2061:        } else if (nz_strcmp(nkey, stat_type, "items") == 0) {
-     1553: 2062:            item_stats(add_stats, c);
+     3778: 2054:            STATS_LOCK();
+     3778: 2055:            APPEND_STAT("bytes", "%llu", (unsigned long long)stats_state.curr_bytes);
+     3778: 2056:            APPEND_STAT("curr_items", "%llu", (unsigned long long)stats_state.curr_items);
+     3778: 2057:            APPEND_STAT("total_items", "%llu", (unsigned long long)stats.total_items);
+     3778: 2058:            STATS_UNLOCK();
+     3778: 2059:            APPEND_STAT("slab_global_page_pool", "%u", global_page_pool_size(NULL));
+     3778: 2060:            item_stats_totals(add_stats, c);
+     1582: 2061:        } else if (nz_strcmp(nkey, stat_type, "items") == 0) {
+     1554: 2062:            item_stats(add_stats, c);
        28: 2063:        } else if (nz_strcmp(nkey, stat_type, "slabs") == 0) {
        28: 2064:            slabs_stats(add_stats, c);
     #####: 2065:        } else if (nz_strcmp(nkey, stat_type, "sizes") == 0) {
@@ -2079,7 +2079,7 @@
         -: 2075:        ret = false;
         -: 2076:    }
         -: 2077:
-     5378: 2078:    return ret;
+     5360: 2078:    return ret;
         -: 2079:}
         -: 2080:
         -: 2081:static inline void get_conn_text(const conn *c, const int af,
@@ -2280,18 +2280,18 @@
         -: 2276: *
         -: 2277: * returns a response string to send back to the client.
         -: 2278: */
-      412: 2279:enum delta_result_type do_add_delta(LIBEVENT_THREAD *t, const char *key, const size_t nkey,
+      404: 2279:enum delta_result_type do_add_delta(LIBEVENT_THREAD *t, const char *key, const size_t nkey,
         -: 2280:                                    const bool incr, const int64_t delta,
         -: 2281:                                    char *buf, uint64_t *cas,
         -: 2282:                                    const uint32_t hv,
         -: 2283:                                    item **it_ret) {
-      412: 2284:    char *ptr;
-      412: 2285:    uint64_t value;
-      412: 2286:    int res;
-      412: 2287:    item *it;
+      404: 2284:    char *ptr;
+      404: 2285:    uint64_t value;
+      404: 2286:    int res;
+      404: 2287:    item *it;
         -: 2288:
-      412: 2289:    it = do_item_get(key, nkey, hv, t, DONT_UPDATE);
-      412: 2290:    if (!it) {
+      404: 2289:    it = do_item_get(key, nkey, hv, t, DONT_UPDATE);
+      404: 2290:    if (!it) {
         -: 2291:        return DELTA_ITEM_NOT_FOUND;
         -: 2292:    }
         -: 2293:
@@ -2433,16 +2433,16 @@
         -: 2429:/*
         -: 2430: * read a UDP request.
         -: 2431: */
-       21: 2432:static enum try_read_result try_read_udp(conn *c) {
-       21: 2433:    int res;
+       18: 2432:static enum try_read_result try_read_udp(conn *c) {
+       18: 2433:    int res;
         -: 2434:
-      21*: 2435:    assert(c != NULL);
+      18*: 2435:    assert(c != NULL);
         -: 2436:
-       21: 2437:    c->request_addr_size = sizeof(c->request_addr);
-       42: 2438:    res = recvfrom(c->sfd, c->rbuf, c->rsize,
-       21: 2439:                   0, (struct sockaddr *)&c->request_addr,
+       18: 2437:    c->request_addr_size = sizeof(c->request_addr);
+       36: 2438:    res = recvfrom(c->sfd, c->rbuf, c->rsize,
+       18: 2439:                   0, (struct sockaddr *)&c->request_addr,
         -: 2440:                   &c->request_addr_size);
-       21: 2441:    if (res > 8) {
+       18: 2441:    if (res > 8) {
        18: 2442:        unsigned char *buf = (unsigned char *)c->rbuf;
        18: 2443:        pthread_mutex_lock(&c->thread->stats.mutex);
        18: 2444:        c->thread->stats.bytes_read += res;
@@ -2479,21 +2479,21 @@
         -: 2475: *
         -: 2476: * @return enum try_read_result
         -: 2477: */
-   460586: 2478:static enum try_read_result try_read_network(conn *c) {
-   460586: 2479:    enum try_read_result gotdata = READ_NO_DATA_RECEIVED;
-   460586: 2480:    int res;
-   460586: 2481:    int num_allocs = 0;
-  460586*: 2482:    assert(c != NULL);
+   461738: 2478:static enum try_read_result try_read_network(conn *c) {
+   461738: 2479:    enum try_read_result gotdata = READ_NO_DATA_RECEIVED;
+   461738: 2480:    int res;
+   461738: 2481:    int num_allocs = 0;
+  461738*: 2482:    assert(c != NULL);
         -: 2483:
-   460586: 2484:    if (c->rcurr != c->rbuf) {
-     3705: 2485:        if (c->rbytes != 0) /* otherwise there's nothing to copy */
-     3705: 2486:            memmove(c->rbuf, c->rcurr, c->rbytes);
-     3705: 2487:        c->rcurr = c->rbuf;
+   461738: 2484:    if (c->rcurr != c->rbuf) {
+     3770: 2485:        if (c->rbytes != 0) /* otherwise there's nothing to copy */
+     3770: 2486:            memmove(c->rbuf, c->rcurr, c->rbytes);
+     3770: 2487:        c->rcurr = c->rbuf;
         -: 2488:    }
         -: 2489:
-   460589: 2490:    while (1) {
+   461741: 2490:    while (1) {
         -: 2491:        // TODO: move to rbuf_* func?
-   460589: 2492:        if (c->rbytes >= c->rsize && c->rbuf_malloced) {
+   461741: 2492:        if (c->rbytes >= c->rsize && c->rbuf_malloced) {
         3: 2493:            if (num_allocs == 4) {
     #####: 2494:                return gotdata;
         -: 2495:            }
@@ -2515,15 +2515,15 @@
         3: 2511:            c->rsize *= 2;
         -: 2512:        }
         -: 2513:
-   460589: 2514:        int avail = c->rsize - c->rbytes;
-   460589: 2515:        res = c->read(c, c->rbuf + c->rbytes, avail);
-   460589: 2516:        if (res > 0) {
-   458495: 2517:            pthread_mutex_lock(&c->thread->stats.mutex);
-   458495: 2518:            c->thread->stats.bytes_read += res;
-   458495: 2519:            pthread_mutex_unlock(&c->thread->stats.mutex);
-   458495: 2520:            gotdata = READ_DATA_RECEIVED;
-   458495: 2521:            c->rbytes += res;
-   458495: 2522:            if (res == avail && c->rbuf_malloced) {
+   461741: 2514:        int avail = c->rsize - c->rbytes;
+   461741: 2515:        res = c->read(c, c->rbuf + c->rbytes, avail);
+   461741: 2516:        if (res > 0) {
+   459647: 2517:            pthread_mutex_lock(&c->thread->stats.mutex);
+   459647: 2518:            c->thread->stats.bytes_read += res;
+   459647: 2519:            pthread_mutex_unlock(&c->thread->stats.mutex);
+   459647: 2520:            gotdata = READ_DATA_RECEIVED;
+   459647: 2521:            c->rbytes += res;
+   459647: 2522:            if (res == avail && c->rbuf_malloced) {
         -: 2523:                // Resize rbuf and try a few times if huge ascii multiget.
         3: 2524:                continue;
         -: 2525:            } else {
@@ -2544,17 +2544,17 @@
         -: 2540:    return gotdata;
         -: 2541:}
         -: 2542:
-   475001: 2543:static bool update_event(conn *c, const int new_flags) {
-  475001*: 2544:    assert(c != NULL);
+   476713: 2543:static bool update_event(conn *c, const int new_flags) {
+  476713*: 2544:    assert(c != NULL);
         -: 2545:
-   475001: 2546:    struct event_base *base = c->event.ev_base;
-   475001: 2547:    if (c->ev_flags == new_flags)
+   476713: 2546:    struct event_base *base = c->event.ev_base;
+   476713: 2547:    if (c->ev_flags == new_flags)
         -: 2548:        return true;
-     1655: 2549:    if (event_del(&c->event) == -1) return false;
-     1655: 2550:    event_set(&c->event, c->sfd, new_flags, event_handler, (void *)c);
-     1655: 2551:    event_base_set(base, &c->event);
-     1655: 2552:    c->ev_flags = new_flags;
-    1655*: 2553:    if (event_add(&c->event, 0) == -1) return false;
+     1713: 2549:    if (event_del(&c->event) == -1) return false;
+     1713: 2550:    event_set(&c->event, c->sfd, new_flags, event_handler, (void *)c);
+     1713: 2551:    event_base_set(base, &c->event);
+     1713: 2552:    c->ev_flags = new_flags;
+    1713*: 2553:    if (event_add(&c->event, 0) == -1) return false;
         -: 2554:    return true;
         -: 2555:}
         -: 2556:
@@ -2603,124 +2603,124 @@
         -: 2599:
         -: 2600:#define TRANSMIT_ONE_RESP true
         -: 2601:#define TRANSMIT_ALL_RESP false
-   467077: 2602:static int _transmit_pre(conn *c, struct iovec *iovs, int iovused, bool one_resp) {
-   467077: 2603:    mc_resp *resp = c->resp_head;
-  1089144: 2604:    while (resp && iovused + resp->iovcnt < IOV_MAX-1) {
-   622099: 2605:        if (resp->skip) {
+   467920: 2602:static int _transmit_pre(conn *c, struct iovec *iovs, int iovused, bool one_resp) {
+   467920: 2603:    mc_resp *resp = c->resp_head;
+  1089856: 2604:    while (resp && iovused + resp->iovcnt < IOV_MAX-1) {
+   621968: 2605:        if (resp->skip) {
         -: 2606:            // Don't actually unchain the resp obj here since it's singly-linked.
         -: 2607:            // Just let the post function handle it linearly.
    164211: 2608:            resp = resp->next;
    164211: 2609:            continue;
         -: 2610:        }
-   457888: 2611:        if (resp->chunked_data_iov) {
+   457757: 2611:        if (resp->chunked_data_iov) {
         -: 2612:            // Handle chunked items specially.
         -: 2613:            // They spend much more time in send so we can be a bit wasteful
         -: 2614:            // in rebuilding iovecs for them.
-    19318: 2615:            item_chunk *ch = (item_chunk *)ITEM_schunk((item *)resp->iov[resp->chunked_data_iov].iov_base);
-    19318: 2616:            int x;
-    77272: 2617:            for (x = 0; x < resp->iovcnt; x++) {
+    19294: 2615:            item_chunk *ch = (item_chunk *)ITEM_schunk((item *)resp->iov[resp->chunked_data_iov].iov_base);
+    19294: 2616:            int x;
+    77176: 2617:            for (x = 0; x < resp->iovcnt; x++) {
         -: 2618:                // This iov is tracking how far we've copied so far.
-    57954: 2619:                if (x == resp->chunked_data_iov) {
-    19318: 2620:                    int done = resp->chunked_total - resp->iov[x].iov_len;
+    57882: 2619:                if (x == resp->chunked_data_iov) {
+    19294: 2620:                    int done = resp->chunked_total - resp->iov[x].iov_len;
         -: 2621:                    // Start from the len to allow binprot to cut the \r\n
-    19318: 2622:                    int todo = resp->iov[x].iov_len;
-   156451: 2623:                    while (ch && todo > 0 && iovused < IOV_MAX-1) {
-   137133: 2624:                        int skip = 0;
-   137133: 2625:                        if (!ch->used) {
-    32834: 2626:                            ch = ch->next;
-    32834: 2627:                            continue;
+    19294: 2622:                    int todo = resp->iov[x].iov_len;
+   156155: 2623:                    while (ch && todo > 0 && iovused < IOV_MAX-1) {
+   136861: 2624:                        int skip = 0;
+   136861: 2625:                        if (!ch->used) {
+    32810: 2626:                            ch = ch->next;
+    32810: 2627:                            continue;
         -: 2628:                        }
         -: 2629:                        // Skip parts we've already sent.
-   104299: 2630:                        if (done >= ch->used) {
-     3818: 2631:                            done -= ch->used;
-     3818: 2632:                            ch = ch->next;
-     3818: 2633:                            continue;
-   100481: 2634:                        } else if (done) {
-      349: 2635:                            skip = done;
-      349: 2636:                            done = 0;
+   104051: 2630:                        if (done >= ch->used) {
+     3654: 2631:                            done -= ch->used;
+     3654: 2632:                            ch = ch->next;
+     3654: 2633:                            continue;
+   100397: 2634:                        } else if (done) {
+      325: 2635:                            skip = done;
+      325: 2636:                            done = 0;
         -: 2637:                        }
-   100481: 2638:                        iovs[iovused].iov_base = ch->data + skip;
+   100397: 2638:                        iovs[iovused].iov_base = ch->data + skip;
         -: 2639:                        // Stupid binary protocol makes this go negative.
-   100481: 2640:                        iovs[iovused].iov_len = ch->used - skip > todo ? todo : ch->used - skip;
-   100481: 2641:                        iovused++;
-   100481: 2642:                        todo -= ch->used - skip;
-   100481: 2643:                        ch = ch->next;
+   100397: 2640:                        iovs[iovused].iov_len = ch->used - skip > todo ? todo : ch->used - skip;
+   100397: 2641:                        iovused++;
+   100397: 2642:                        todo -= ch->used - skip;
+   100397: 2643:                        ch = ch->next;
         -: 2644:                    }
         -: 2645:                } else {
-    38636: 2646:                    iovs[iovused].iov_base = resp->iov[x].iov_base;
-    38636: 2647:                    iovs[iovused].iov_len = resp->iov[x].iov_len;
-    38636: 2648:                    iovused++;
+    38588: 2646:                    iovs[iovused].iov_base = resp->iov[x].iov_base;
+    38588: 2647:                    iovs[iovused].iov_len = resp->iov[x].iov_len;
+    38588: 2648:                    iovused++;
         -: 2649:                }
-    57954: 2650:                if (iovused >= IOV_MAX-1)
+    57882: 2650:                if (iovused >= IOV_MAX-1)
         -: 2651:                    break;
         -: 2652:            }
         -: 2653:        } else {
-   438570: 2654:            memcpy(&iovs[iovused], resp->iov, sizeof(struct iovec)*resp->iovcnt);
-   438570: 2655:            iovused += resp->iovcnt;
+   438463: 2654:            memcpy(&iovs[iovused], resp->iov, sizeof(struct iovec)*resp->iovcnt);
+   438463: 2655:            iovused += resp->iovcnt;
         -: 2656:        }
         -: 2657:
         -: 2658:        // done looking at first response, walk down the chain.
-   457888: 2659:        resp = resp->next;
+   457757: 2659:        resp = resp->next;
         -: 2660:        // used for UDP mode: UDP cannot send multiple responses per packet.
-   457888: 2661:        if (one_resp)
+   457757: 2661:        if (one_resp)
         -: 2662:            break;
         -: 2663:    }
-   467077: 2664:    return iovused;
+   467920: 2664:    return iovused;
         -: 2665:}
         -: 2666:
         -: 2667:/*
         -: 2668: * Decrements and completes responses based on how much data was transmitted.
         -: 2669: * Takes the connection and current result bytes.
         -: 2670: */
-   466789: 2671:static void _transmit_post(conn *c, ssize_t res) {
+   467646: 2671:static void _transmit_post(conn *c, ssize_t res) {
         -: 2672:    // We've written some of the data. Remove the completed
         -: 2673:    // responses from the list of pending writes.
-   466789: 2674:    mc_resp *resp = c->resp_head;
-  1087237: 2675:    while (resp) {
-   620789: 2676:        int x;
-   620789: 2677:        if (resp->skip) {
+   467646: 2674:    mc_resp *resp = c->resp_head;
+  1087988: 2675:    while (resp) {
+   620672: 2676:        int x;
+   620672: 2677:        if (resp->skip) {
    164211: 2678:            resp = resp_finish(c, resp);
    164211: 2679:            continue;
         -: 2680:        }
         -: 2681:
         -: 2682:        // fastpath check. all small responses should cut here.
-   456578: 2683:        if (res >= resp->tosend) {
-   456237: 2684:            res -= resp->tosend;
-   456237: 2685:            resp = resp_finish(c, resp);
-   456237: 2686:            continue;
+   456461: 2683:        if (res >= resp->tosend) {
+   456131: 2684:            res -= resp->tosend;
+   456131: 2685:            resp = resp_finish(c, resp);
+   456131: 2686:            continue;
         -: 2687:        }
         -: 2688:
         -: 2689:        // it's fine to re-check iov's that were zeroed out before.
-      755: 2690:        for (x = 0; x < resp->iovcnt; x++) {
-      755: 2691:            struct iovec *iov = &resp->iov[x];
-      755: 2692:            if (res >= iov->iov_len) {
-      414: 2693:                resp->tosend -= iov->iov_len;
-      414: 2694:                res -= iov->iov_len;
-      414: 2695:                iov->iov_len = 0;
+      733: 2690:        for (x = 0; x < resp->iovcnt; x++) {
+      733: 2691:            struct iovec *iov = &resp->iov[x];
+      733: 2692:            if (res >= iov->iov_len) {
+      403: 2693:                resp->tosend -= iov->iov_len;
+      403: 2694:                res -= iov->iov_len;
+      403: 2695:                iov->iov_len = 0;
         -: 2696:            } else {
         -: 2697:                // Dumb special case for chunked items. Currently tracking
         -: 2698:                // where to inject the chunked item via iov_base.
         -: 2699:                // Extra not-great since chunked items can't be the first
         -: 2700:                // index, so we have to check for non-zero c_d_iov first.
-      341: 2701:                if (!resp->chunked_data_iov || x != resp->chunked_data_iov) {
+      330: 2701:                if (!resp->chunked_data_iov || x != resp->chunked_data_iov) {
       163: 2702:                    iov->iov_base = (char *)iov->iov_base + res;
         -: 2703:                }
-      341: 2704:                iov->iov_len -= res;
-      341: 2705:                resp->tosend -= res;
-      341: 2706:                res = 0;
-      341: 2707:                break;
+      330: 2704:                iov->iov_len -= res;
+      330: 2705:                resp->tosend -= res;
+      330: 2706:                res = 0;
+      330: 2707:                break;
         -: 2708:            }
         -: 2709:        }
         -: 2710:
         -: 2711:        // are we done with this response object?
-      341: 2712:        if (resp->tosend == 0) {
+      330: 2712:        if (resp->tosend == 0) {
     #####: 2713:            resp = resp_finish(c, resp);
         -: 2714:        } else {
         -: 2715:            // Jammed up here. This is the new head.
         -: 2716:            break;
         -: 2717:        }
         -: 2718:    }
-   466789: 2719:}
+   467646: 2719:}
         -: 2720:
         -: 2721:/*
         -: 2722: * Transmit the next chunk of data from our list of msgbuf structures.
@@ -2731,45 +2731,45 @@
         -: 2727: *   TRANSMIT_SOFT_ERROR Can't write any more right now.
         -: 2728: *   TRANSMIT_HARD_ERROR Can't write (c->state is set to conn_closing)
         -: 2729: */
-   467045: 2730:static enum transmit_result transmit(conn *c) {
-  467045*: 2731:    assert(c != NULL);
-   467045: 2732:    struct iovec iovs[IOV_MAX];
-   467045: 2733:    struct msghdr msg;
-   467045: 2734:    int iovused = 0;
+   467888: 2730:static enum transmit_result transmit(conn *c) {
+  467888*: 2731:    assert(c != NULL);
+   467888: 2732:    struct iovec iovs[IOV_MAX];
+   467888: 2733:    struct msghdr msg;
+   467888: 2734:    int iovused = 0;
         -: 2735:
         -: 2736:    // init the msg.
-   467045: 2737:    memset(&msg, 0, sizeof(struct msghdr));
-   467045: 2738:    msg.msg_iov = iovs;
+   467888: 2737:    memset(&msg, 0, sizeof(struct msghdr));
+   467888: 2738:    msg.msg_iov = iovs;
         -: 2739:
-   467045: 2740:    iovused = _transmit_pre(c, iovs, iovused, TRANSMIT_ALL_RESP);
-   467045: 2741:    if (iovused == 0) {
+   467888: 2740:    iovused = _transmit_pre(c, iovs, iovused, TRANSMIT_ALL_RESP);
+   467888: 2741:    if (iovused == 0) {
         -: 2742:        // Avoid the syscall if we're only handling a noreply.
         -: 2743:        // Return the response object.
-    51420: 2744:        _transmit_post(c, 0);
-    51420: 2745:        return TRANSMIT_COMPLETE;
+    52387: 2744:        _transmit_post(c, 0);
+    52387: 2745:        return TRANSMIT_COMPLETE;
         -: 2746:    }
         -: 2747:
         -: 2748:    // Alright, send.
-   415625: 2749:    ssize_t res;
-   415625: 2750:    msg.msg_iovlen = iovused;
-   415625: 2751:    res = c->sendmsg(c, &msg, 0);
-   415625: 2752:    if (res >= 0) {
-   415337: 2753:        pthread_mutex_lock(&c->thread->stats.mutex);
-   415337: 2754:        c->thread->stats.bytes_written += res;
-   415337: 2755:        pthread_mutex_unlock(&c->thread->stats.mutex);
+   415501: 2749:    ssize_t res;
+   415501: 2750:    msg.msg_iovlen = iovused;
+   415501: 2751:    res = c->sendmsg(c, &msg, 0);
+   415501: 2752:    if (res >= 0) {
+   415227: 2753:        pthread_mutex_lock(&c->thread->stats.mutex);
+   415227: 2754:        c->thread->stats.bytes_written += res;
+   415227: 2755:        pthread_mutex_unlock(&c->thread->stats.mutex);
         -: 2756:
         -: 2757:        // Decrement any partial IOV's and complete any finished resp's.
-   415337: 2758:        _transmit_post(c, res);
+   415227: 2758:        _transmit_post(c, res);
         -: 2759:
-   415337: 2760:        if (c->resp_head) {
+   415227: 2760:        if (c->resp_head) {
         -: 2761:            return TRANSMIT_INCOMPLETE;
         -: 2762:        } else {
-   415010: 2763:            return TRANSMIT_COMPLETE;
+   414911: 2763:            return TRANSMIT_COMPLETE;
         -: 2764:        }
         -: 2765:    }
         -: 2766:
-      288: 2767:    if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-      286: 2768:        if (!update_event(c, EV_WRITE | EV_PERSIST)) {
+      274: 2767:    if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      272: 2768:        if (!update_event(c, EV_WRITE | EV_PERSIST)) {
     #####: 2769:            if (settings.verbose > 0)
     #####: 2770:                fprintf(stderr, "Couldn't update event\n");
     #####: 2771:            conn_set_state(c, conn_closing);
@@ -2930,14 +2930,14 @@
         -: 2926:/* TODO: restrict number of times this can loop.
         -: 2927: * Also, benchmark using readv's.
         -: 2928: */
-     8262: 2929:static int read_into_chunked_item(conn *c) {
-     8262: 2930:    int total = 0;
-     8262: 2931:    int res;
-    8262*: 2932:    assert(c->rcurr != c->ritem);
+     8125: 2929:static int read_into_chunked_item(conn *c) {
+     8125: 2930:    int total = 0;
+     8125: 2931:    int res;
+    8125*: 2932:    assert(c->rcurr != c->ritem);
         -: 2933:
-    97759: 2934:    while (c->rlbytes > 0) {
-    93234: 2935:        item_chunk *ch = (item_chunk *)c->ritem;
-    93234: 2936:        if (ch->size == ch->used) {
+    97648: 2934:    while (c->rlbytes > 0) {
+    93032: 2935:        item_chunk *ch = (item_chunk *)c->ritem;
+    93032: 2936:        if (ch->size == ch->used) {
         -: 2937:            // FIXME: ch->next is currently always 0. remove this?
     41442: 2938:            if (ch->next) {
     #####: 2939:                c->ritem = (char *) ch->next;
@@ -2956,34 +2956,34 @@
         -: 2952:            }
         -: 2953:        }
         -: 2954:
-    51792: 2955:        int unused = ch->size - ch->used;
+    51590: 2955:        int unused = ch->size - ch->used;
         -: 2956:        /* first check if we have leftovers in the conn_read buffer */
-    51792: 2957:        if (c->rbytes > 0) {
-    17313: 2958:            total = 0;
-    17313: 2959:            int tocopy = c->rbytes > c->rlbytes ? c->rlbytes : c->rbytes;
-    17313: 2960:            tocopy = tocopy > unused ? unused : tocopy;
-    17313: 2961:            if (c->ritem != c->rcurr) {
-    17313: 2962:                memmove(ch->data + ch->used, c->rcurr, tocopy);
+    51590: 2957:        if (c->rbytes > 0) {
+    17242: 2958:            total = 0;
+    17242: 2959:            int tocopy = c->rbytes > c->rlbytes ? c->rlbytes : c->rbytes;
+    17242: 2960:            tocopy = tocopy > unused ? unused : tocopy;
+    17242: 2961:            if (c->ritem != c->rcurr) {
+    17242: 2962:                memmove(ch->data + ch->used, c->rcurr, tocopy);
         -: 2963:            }
-    17313: 2964:            total += tocopy;
-    17313: 2965:            c->rlbytes -= tocopy;
-    17313: 2966:            c->rcurr += tocopy;
-    17313: 2967:            c->rbytes -= tocopy;
-    17313: 2968:            ch->used += tocopy;
-    17313: 2969:            if (c->rlbytes == 0) {
+    17242: 2964:            total += tocopy;
+    17242: 2965:            c->rlbytes -= tocopy;
+    17242: 2966:            c->rcurr += tocopy;
+    17242: 2967:            c->rbytes -= tocopy;
+    17242: 2968:            ch->used += tocopy;
+    17242: 2969:            if (c->rlbytes == 0) {
         -: 2970:                break;
         -: 2971:            }
         -: 2972:        } else {
         -: 2973:            /*  now try reading from the socket */
-    68958: 2974:            res = c->read(c, ch->data + ch->used,
-    34479: 2975:                    (unused > c->rlbytes ? c->rlbytes : unused));
-    34479: 2976:            if (res > 0) {
-    33661: 2977:                pthread_mutex_lock(&c->thread->stats.mutex);
-    33661: 2978:                c->thread->stats.bytes_read += res;
-    33661: 2979:                pthread_mutex_unlock(&c->thread->stats.mutex);
-    33661: 2980:                ch->used += res;
-    33661: 2981:                total += res;
-    33661: 2982:                c->rlbytes -= res;
+    68696: 2974:            res = c->read(c, ch->data + ch->used,
+    34348: 2975:                    (unused > c->rlbytes ? c->rlbytes : unused));
+    34348: 2976:            if (res > 0) {
+    33667: 2977:                pthread_mutex_lock(&c->thread->stats.mutex);
+    33667: 2978:                c->thread->stats.bytes_read += res;
+    33667: 2979:                pthread_mutex_unlock(&c->thread->stats.mutex);
+    33667: 2980:                ch->used += res;
+    33667: 2981:                total += res;
+    33667: 2982:                c->rlbytes -= res;
         -: 2983:            } else {
         -: 2984:                /* Reset total to the latest result so caller can handle it */
         -: 2985:                total = res;
@@ -2997,7 +2997,7 @@
         -: 2993:       The above binprot check ensures inline space for \r\n, but if we do
         -: 2994:       exactly enough allocs there will be no additional chunk for \r\n.
         -: 2995:     */
-     8262: 2996:    if (c->rlbytes == 0 && c->protocol == binary_prot && total >= 0) {
+     8125: 2996:    if (c->rlbytes == 0 && c->protocol == binary_prot && total >= 0) {
       202: 2997:        item_chunk *ch = (item_chunk *)c->ritem;
       202: 2998:        if (ch->size - ch->used < 2) {
         2: 2999:            c->ritem = (char *) do_item_alloc_chunk(ch, 2);
@@ -3006,28 +3006,28 @@
         -: 3002:            }
         -: 3003:        }
         -: 3004:    }
-     8262: 3005:    return total;
+     8125: 3005:    return total;
         -: 3006:}
         -: 3007:
-   479733: 3008:static void drive_machine(conn *c) {
-   479733: 3009:    bool stop = false;
-   479733: 3010:    int sfd;
-   479733: 3011:    socklen_t addrlen;
-   479733: 3012:    struct sockaddr_storage addr;
-   479733: 3013:    int nreqs = settings.reqs_per_event;
-   479733: 3014:    int res;
-   479733: 3015:    const char *str;
+   481442: 3008:static void drive_machine(conn *c) {
+   481442: 3009:    bool stop = false;
+   481442: 3010:    int sfd;
+   481442: 3011:    socklen_t addrlen;
+   481442: 3012:    struct sockaddr_storage addr;
+   481442: 3013:    int nreqs = settings.reqs_per_event;
+   481442: 3014:    int res;
+   481442: 3015:    const char *str;
         -: 3016:#ifdef HAVE_ACCEPT4
-   479733: 3017:    static int  use_accept4 = 1;
+   481442: 3017:    static int  use_accept4 = 1;
         -: 3018:#else
         -: 3019:    static int  use_accept4 = 0;
         -: 3020:#endif
         -: 3021:
-  479733*: 3022:    assert(c != NULL);
+  481442*: 3022:    assert(c != NULL);
         -: 3023:
-  4116002: 3024:    while (!stop) {
+  4121167: 3024:    while (!stop) {
         -: 3025:
-  3636269: 3026:        switch(c->state) {
+  3639725: 3026:        switch(c->state) {
      2175: 3027:        case conn_listening:
      2175: 3028:            addrlen = sizeof(addr);
         -: 3029:#ifdef HAVE_ACCEPT4
@@ -3134,40 +3134,40 @@
         -: 3130:            stop = true;
         -: 3131:            break;
         -: 3132:
-   460610: 3133:        case conn_waiting:
-   460610: 3134:            rbuf_release(c);
-   460610: 3135:            if (!update_event(c, EV_READ | EV_PERSIST)) {
+   461759: 3133:        case conn_waiting:
+   461759: 3134:            rbuf_release(c);
+   461759: 3135:            if (!update_event(c, EV_READ | EV_PERSIST)) {
     #####: 3136:                if (settings.verbose > 0)
     #####: 3137:                    fprintf(stderr, "Couldn't update event\n");
     #####: 3138:                conn_set_state(c, conn_closing);
     #####: 3139:                break;
         -: 3140:            }
         -: 3141:
-   460610: 3142:            conn_set_state(c, conn_read);
-   460610: 3143:            stop = true;
-   460610: 3144:            break;
+   461759: 3142:            conn_set_state(c, conn_read);
+   461759: 3143:            stop = true;
+   461759: 3144:            break;
         -: 3145:
-   460607: 3146:        case conn_read:
-   460607: 3147:            if (!IS_UDP(c->transport)) {
+   461756: 3146:        case conn_read:
+   461756: 3147:            if (!IS_UDP(c->transport)) {
         -: 3148:                // Assign a read buffer if necessary.
-   460586: 3149:                if (!rbuf_alloc(c)) {
+   461738: 3149:                if (!rbuf_alloc(c)) {
         -: 3150:                    // TODO: Some way to allow for temporary failures.
     #####: 3151:                    conn_set_state(c, conn_closing);
     #####: 3152:                    break;
         -: 3153:                }
-   460586: 3154:                res = try_read_network(c);
+   461738: 3154:                res = try_read_network(c);
         -: 3155:            } else {
         -: 3156:                // UDP connections always have a static buffer.
-       21: 3157:                res = try_read_udp(c);
+       18: 3157:                res = try_read_udp(c);
         -: 3158:            }
         -: 3159:
-   460607: 3160:            switch (res) {
-        3: 3161:            case READ_NO_DATA_RECEIVED:
-        3: 3162:                conn_set_state(c, conn_waiting);
-        3: 3163:                break;
-   458510: 3164:            case READ_DATA_RECEIVED:
-   458510: 3165:                conn_set_state(c, conn_parse_cmd);
-   458510: 3166:                break;
+   461756: 3160:            switch (res) {
+    #####: 3161:            case READ_NO_DATA_RECEIVED:
+    #####: 3162:                conn_set_state(c, conn_waiting);
+    #####: 3163:                break;
+   459662: 3164:            case READ_DATA_RECEIVED:
+   459662: 3165:                conn_set_state(c, conn_parse_cmd);
+   459662: 3166:                break;
      2094: 3167:            case READ_ERROR:
      2094: 3168:                conn_set_state(c, conn_closing);
      2094: 3169:                break;
@@ -3177,42 +3177,42 @@
         -: 3173:            }
         -: 3174:            break;
         -: 3175:
-   608458: 3176:        case conn_parse_cmd:
-   608458: 3177:            c->noreply = false;
-   608458: 3178:            if (c->try_read_command(c) == 0) {
+   608421: 3176:        case conn_parse_cmd:
+   608421: 3177:            c->noreply = false;
+   608421: 3178:            if (c->try_read_command(c) == 0) {
         -: 3179:                /* we need more data! */
-     7385: 3180:                if (c->resp_head) {
+     7454: 3180:                if (c->resp_head) {
         -: 3181:                    // Buffered responses waiting, flush in the meantime.
-     3675: 3182:                    conn_set_state(c, conn_mwrite);
+     3679: 3182:                    conn_set_state(c, conn_mwrite);
         -: 3183:                } else {
-     3710: 3184:                    conn_set_state(c, conn_waiting);
+     3775: 3184:                    conn_set_state(c, conn_waiting);
         -: 3185:                }
         -: 3186:            }
         -: 3187:
         -: 3188:            break;
         -: 3189:
-   957034: 3190:        case conn_new_cmd:
+   957723: 3190:        case conn_new_cmd:
         -: 3191:            /* Only process nreqs at a time to avoid starving other
         -: 3192:               connections */
         -: 3193:
-   957034: 3194:            --nreqs;
-   957034: 3195:            if (nreqs >= 0) {
-   947603: 3196:                reset_cmd_handler(c);
-     9431: 3197:            } else if (c->resp_head) {
+   957723: 3194:            --nreqs;
+   957723: 3195:            if (nreqs >= 0) {
+   948586: 3196:                reset_cmd_handler(c);
+     9137: 3197:            } else if (c->resp_head) {
         -: 3198:                // flush response pipe on yield.
-     4630: 3199:                conn_set_state(c, conn_mwrite);
+     4501: 3199:                conn_set_state(c, conn_mwrite);
         -: 3200:            } else {
-     4801: 3201:                pthread_mutex_lock(&c->thread->stats.mutex);
-     4801: 3202:                c->thread->stats.conn_yields++;
-     4801: 3203:                pthread_mutex_unlock(&c->thread->stats.mutex);
-     4801: 3204:                if (c->rbytes > 0) {
+     4636: 3201:                pthread_mutex_lock(&c->thread->stats.mutex);
+     4636: 3202:                c->thread->stats.conn_yields++;
+     4636: 3203:                pthread_mutex_unlock(&c->thread->stats.mutex);
+     4636: 3204:                if (c->rbytes > 0) {
         -: 3205:                    /* We have already read in data into the input buffer,
         -: 3206:                       so libevent will most likely not signal read events
         -: 3207:                       on the socket (unless more data is available. As a
         -: 3208:                       hack we should just put in a request to write data,
         -: 3209:                       because that should be possible ;-)
         -: 3210:                    */
-     4773: 3211:                    if (!update_event(c, EV_WRITE | EV_PERSIST)) {
+     4611: 3211:                    if (!update_event(c, EV_WRITE | EV_PERSIST)) {
     #####: 3212:                        if (settings.verbose > 0)
     #####: 3213:                            fprintf(stderr, "Couldn't update event\n");
     #####: 3214:                        conn_set_state(c, conn_closing);
@@ -3223,14 +3223,14 @@
         -: 3219:            }
         -: 3220:            break;
         -: 3221:
-   676724: 3222:        case conn_nread:
-   676724: 3223:            if (c->rlbytes == 0) {
-   327308: 3224:                complete_nread(c);
-   327308: 3225:                break;
+   676438: 3222:        case conn_nread:
+   676438: 3223:            if (c->rlbytes == 0) {
+   327312: 3224:                complete_nread(c);
+   327312: 3225:                break;
         -: 3226:            }
         -: 3227:
         -: 3228:            /* Check if rbytes < 0, to prevent crash */
-   349416: 3229:            if (c->rlbytes < 0) {
+   349126: 3229:            if (c->rlbytes < 0) {
     #####: 3230:                if (settings.verbose) {
     #####: 3231:                    fprintf(stderr, "Invalid rlbytes to read: len %d\n", c->rlbytes);
         -: 3232:                }
@@ -3238,47 +3238,47 @@
     #####: 3234:                break;
         -: 3235:            }
         -: 3236:
-   349416: 3237:            if (c->item_malloced || ((((item *)c->item)->it_flags & ITEM_CHUNKED) == 0) ) {
+   349126: 3237:            if (c->item_malloced || ((((item *)c->item)->it_flags & ITEM_CHUNKED) == 0) ) {
         -: 3238:                /* first check if we have leftovers in the conn_read buffer */
-   341154: 3239:                if (c->rbytes > 0) {
-   319776: 3240:                    int tocopy = c->rbytes > c->rlbytes ? c->rlbytes : c->rbytes;
-   319776: 3241:                    memmove(c->ritem, c->rcurr, tocopy);
-   319776: 3242:                    c->ritem += tocopy;
-   319776: 3243:                    c->rlbytes -= tocopy;
-   319776: 3244:                    c->rcurr += tocopy;
-   319776: 3245:                    c->rbytes -= tocopy;
-   319776: 3246:                    if (c->rlbytes == 0) {
+   341001: 3239:                if (c->rbytes > 0) {
+   319780: 3240:                    int tocopy = c->rbytes > c->rlbytes ? c->rlbytes : c->rbytes;
+   319780: 3241:                    memmove(c->ritem, c->rcurr, tocopy);
+   319780: 3242:                    c->ritem += tocopy;
+   319780: 3243:                    c->rlbytes -= tocopy;
+   319780: 3244:                    c->rcurr += tocopy;
+   319780: 3245:                    c->rbytes -= tocopy;
+   319780: 3246:                    if (c->rlbytes == 0) {
         -: 3247:                        break;
         -: 3248:                    }
         -: 3249:                }
         -: 3250:
         -: 3251:                /*  now try reading from the socket */
-    63323: 3252:                res = c->read(c, c->ritem, c->rlbytes);
-    63323: 3253:                if (res > 0) {
-    54821: 3254:                    pthread_mutex_lock(&c->thread->stats.mutex);
-    54821: 3255:                    c->thread->stats.bytes_read += res;
-    54821: 3256:                    pthread_mutex_unlock(&c->thread->stats.mutex);
-    54821: 3257:                    if (c->rcurr == c->ritem) {
+    62634: 3252:                res = c->read(c, c->ritem, c->rlbytes);
+    62634: 3253:                if (res > 0) {
+    53249: 3254:                    pthread_mutex_lock(&c->thread->stats.mutex);
+    53249: 3255:                    c->thread->stats.bytes_read += res;
+    53249: 3256:                    pthread_mutex_unlock(&c->thread->stats.mutex);
+    53249: 3257:                    if (c->rcurr == c->ritem) {
     #####: 3258:                        c->rcurr += res;
         -: 3259:                    }
-    54821: 3260:                    c->ritem += res;
-    54821: 3261:                    c->rlbytes -= res;
-    54821: 3262:                    break;
+    53249: 3260:                    c->ritem += res;
+    53249: 3261:                    c->rlbytes -= res;
+    53249: 3262:                    break;
         -: 3263:                }
         -: 3264:            } else {
-     8262: 3265:                res = read_into_chunked_item(c);
-     8262: 3266:                if (res > 0)
+     8125: 3265:                res = read_into_chunked_item(c);
+     8125: 3266:                if (res > 0)
         -: 3267:                    break;
         -: 3268:            }
         -: 3269:
-     9320: 3270:            if (res == 0) { /* end of stream */
+    10066: 3270:            if (res == 0) { /* end of stream */
         2: 3271:                c->close_reason = NORMAL_CLOSE;
         2: 3272:                conn_set_state(c, conn_closing);
         2: 3273:                break;
         -: 3274:            }
         -: 3275:
-     9318: 3276:            if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-     9318: 3277:                if (!update_event(c, EV_READ | EV_PERSIST)) {
+    10064: 3276:            if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    10064: 3277:                if (!update_event(c, EV_READ | EV_PERSIST)) {
     #####: 3278:                    if (settings.verbose > 0)
     #####: 3279:                        fprintf(stderr, "Couldn't update event\n");
     #####: 3280:                    conn_set_state(c, conn_closing);
@@ -3312,15 +3312,15 @@
     #####: 3308:            conn_set_state(c, conn_closing);
     #####: 3309:            break;
         -: 3310:
-      669: 3311:        case conn_swallow:
+      618: 3311:        case conn_swallow:
         -: 3312:            /* we are reading sbytes and throwing them away */
-      669: 3313:            if (c->sbytes <= 0) {
+      618: 3313:            if (c->sbytes <= 0) {
        12: 3314:                conn_set_state(c, conn_new_cmd);
        12: 3315:                break;
         -: 3316:            }
         -: 3317:
         -: 3318:            /* first check if we have leftovers in the conn_read buffer */
-      657: 3319:            if (c->rbytes > 0) {
+      606: 3319:            if (c->rbytes > 0) {
        11: 3320:                int tocopy = c->rbytes > c->sbytes ? c->sbytes : c->rbytes;
        11: 3321:                c->sbytes -= tocopy;
        11: 3322:                c->rcurr += tocopy;
@@ -3329,21 +3329,21 @@
         -: 3325:            }
         -: 3326:
         -: 3327:            /*  now try reading from the socket */
-      646: 3328:            res = c->read(c, c->rbuf, c->rsize > c->sbytes ? c->sbytes : c->rsize);
-      646: 3329:            if (res > 0) {
-      632: 3330:                pthread_mutex_lock(&c->thread->stats.mutex);
-      632: 3331:                c->thread->stats.bytes_read += res;
-      632: 3332:                pthread_mutex_unlock(&c->thread->stats.mutex);
-      632: 3333:                c->sbytes -= res;
-      632: 3334:                break;
+      595: 3328:            res = c->read(c, c->rbuf, c->rsize > c->sbytes ? c->sbytes : c->rsize);
+      595: 3329:            if (res > 0) {
+      588: 3330:                pthread_mutex_lock(&c->thread->stats.mutex);
+      588: 3331:                c->thread->stats.bytes_read += res;
+      588: 3332:                pthread_mutex_unlock(&c->thread->stats.mutex);
+      588: 3333:                c->sbytes -= res;
+      588: 3334:                break;
         -: 3335:            }
-       14: 3336:            if (res == 0) { /* end of stream */
+        7: 3336:            if (res == 0) { /* end of stream */
     #####: 3337:                c->close_reason = NORMAL_CLOSE;
     #####: 3338:                conn_set_state(c, conn_closing);
     #####: 3339:                break;
         -: 3340:            }
-       14: 3341:            if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-       14: 3342:                if (!update_event(c, EV_READ | EV_PERSIST)) {
+        7: 3341:            if (res == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        7: 3342:                if (!update_event(c, EV_READ | EV_PERSIST)) {
     #####: 3343:                    if (settings.verbose > 0)
     #####: 3344:                        fprintf(stderr, "Couldn't update event\n");
     #####: 3345:                    conn_set_state(c, conn_closing);
@@ -3358,35 +3358,35 @@
     #####: 3354:            conn_set_state(c, conn_closing);
     #####: 3355:            break;
         -: 3356:
-   467463: 3357:        case conn_write:
+   468306: 3357:        case conn_write:
         -: 3358:        case conn_mwrite:
         -: 3359:            /* have side IO's that must process before transmit() can run.
         -: 3360:             * remove the connection from the worker thread and dispatch the
         -: 3361:             * IO queue
         -: 3362:             */
-  467463*: 3363:            assert(c->io_queues_submitted == 0);
+  468306*: 3363:            assert(c->io_queues_submitted == 0);
         -: 3364:
-   501398: 3365:            for (io_queue_t *q = c->io_queues; q->type != IO_QUEUE_NONE; q++) {
-    33935: 3366:                if (q->stack_ctx != NULL) {
+   502725: 3365:            for (io_queue_t *q = c->io_queues; q->type != IO_QUEUE_NONE; q++) {
+    34419: 3366:                if (q->stack_ctx != NULL) {
       386: 3367:                    io_queue_cb_t *qcb = thread_io_queue_get(c->thread, q->type);
       386: 3368:                    qcb->submit_cb(q);
       386: 3369:                    c->io_queues_submitted++;
         -: 3370:                }
         -: 3371:            }
-   467463: 3372:            if (c->io_queues_submitted != 0) {
+   468306: 3372:            if (c->io_queues_submitted != 0) {
       386: 3373:                conn_set_state(c, conn_io_queue);
         -: 3374:
       386: 3375:                stop = true;
       386: 3376:                break;
         -: 3377:            }
         -: 3378:
-   467077: 3379:            switch (!IS_UDP(c->transport) ? transmit(c) : transmit_udp(c)) {
-   466448: 3380:            case TRANSMIT_COMPLETE:
-   466448: 3381:                if (c->state == conn_mwrite) {
+   467920: 3379:            switch (!IS_UDP(c->transport) ? transmit(c) : transmit_udp(c)) {
+   467316: 3380:            case TRANSMIT_COMPLETE:
+   467316: 3381:                if (c->state == conn_mwrite) {
         -: 3382:                    // Free up IO wraps and any half-uploaded items.
-   466448: 3383:                    conn_release_items(c);
-   466448: 3384:                    conn_set_state(c, conn_new_cmd);
-   466448: 3385:                    if (c->close_after_write) {
+   467316: 3383:                    conn_release_items(c);
+   467316: 3384:                    conn_set_state(c, conn_new_cmd);
+   467316: 3385:                    if (c->close_after_write) {
         8: 3386:                        conn_set_state(c, conn_closing);
         -: 3387:                    }
         -: 3388:                } else {
@@ -3400,9 +3400,9 @@
         -: 3396:            case TRANSMIT_HARD_ERROR:
         -: 3397:                break;                   /* Continue in state machine. */
         -: 3398:
-      286: 3399:            case TRANSMIT_SOFT_ERROR:
-      286: 3400:                stop = true;
-      286: 3401:                break;
+      272: 3399:            case TRANSMIT_SOFT_ERROR:
+      272: 3400:                stop = true;
+      272: 3401:                break;
         -: 3402:            }
         -: 3403:            break;
         -: 3404:
@@ -3421,7 +3421,7 @@
         -: 3417:
         -: 3418:        case conn_watch:
         -: 3419:            /* We handed off our connection to the logger thread. */
-  4116002: 3420:            stop = true;
+  4121167: 3420:            stop = true;
         -: 3421:            break;
     #####: 3422:        case conn_io_queue:
         -: 3423:            /* Woke up while waiting for an async return, but not ready. */
@@ -3441,31 +3441,31 @@
     #####: 3437:            assert(false);
         -: 3438:            break;
         -: 3439:        }
-   285275: 3440:    }
+   285811: 3440:    }
         -: 3441:
-   479733: 3442:    return;
+   481442: 3442:    return;
         -: 3443:}
         -: 3444:
-   479335: 3445:void event_handler(const evutil_socket_t fd, const short which, void *arg) {
-   479335: 3446:    conn *c;
+   481044: 3445:void event_handler(const evutil_socket_t fd, const short which, void *arg) {
+   481044: 3446:    conn *c;
         -: 3447:
-   479335: 3448:    c = (conn *)arg;
-  479335*: 3449:    assert(c != NULL);
+   481044: 3448:    c = (conn *)arg;
+  481044*: 3449:    assert(c != NULL);
         -: 3450:
-   479335: 3451:    c->which = which;
+   481044: 3451:    c->which = which;
         -: 3452:
         -: 3453:    /* sanity */
-   479335: 3454:    if (fd != c->sfd) {
+   481044: 3454:    if (fd != c->sfd) {
     #####: 3455:        if (settings.verbose > 0)
     #####: 3456:            fprintf(stderr, "Catastrophic: event fd doesn't match conn fd!\n");
     #####: 3457:        conn_close(c);
     #####: 3458:        return;
         -: 3459:    }
         -: 3460:
-   479335: 3461:    drive_machine(c);
+   481044: 3461:    drive_machine(c);
         -: 3462:
         -: 3463:    /* wait for next event */
-   479335: 3464:    return;
+   481044: 3464:    return;
         -: 3465:}
         -: 3466:
        50: 3467:static int new_socket(struct addrinfo *ai) {

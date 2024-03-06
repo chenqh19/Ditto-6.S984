@@ -62,14 +62,14 @@
         2:   58:    free(a);
         2:   59:}
         -:   60:
-    14785:   61:static void window_sum(struct window_data *wd, struct window_data *w, uint32_t size) {
+    14666:   61:static void window_sum(struct window_data *wd, struct window_data *w, uint32_t size) {
         -:   62:    int x;
-   382762:   63:    for (x = 0; x < size; x++) {
-   367977:   64:        struct window_data *d = &wd[x];
-   367977:   65:        w->age += d->age;
-   367977:   66:        w->dirty += d->dirty;
-   367977:   67:        w->evicted_ratio += d->evicted_ratio;
-   367977:   68:        w->evicted_seen += d->evicted_seen;
+   379069:   63:    for (x = 0; x < size; x++) {
+   364403:   64:        struct window_data *d = &wd[x];
+   364403:   65:        w->age += d->age;
+   364403:   66:        w->dirty += d->dirty;
+   364403:   67:        w->evicted_ratio += d->evicted_ratio;
+   364403:   68:        w->evicted_seen += d->evicted_seen;
         -:   69:    }
         -:   70:}
         -:   71:
@@ -89,49 +89,49 @@
         -:   85:
         -:   86:    // fill after structs
       309:   87:    fill_item_stats_automove(a->iam_after);
-      309:   88:    fill_slab_stats_automove(a->sam_after);
+      308:   88:    fill_slab_stats_automove(a->sam_after);
         -:   89:    // Loop once to get total_evicted for this window.
-      309:   90:    uint64_t evicted_total = 0;
-    20085:   91:    for (n = POWER_SMALLEST; n < MAX_NUMBER_OF_SLAB_CLASSES; n++) {
-    19467:   92:        evicted_total += a->iam_after[n].evicted - a->iam_before[n].evicted;
+      308:   90:    uint64_t evicted_total = 0;
+    20019:   91:    for (n = POWER_SMALLEST; n < MAX_NUMBER_OF_SLAB_CLASSES; n++) {
+    19404:   92:        evicted_total += a->iam_after[n].evicted - a->iam_before[n].evicted;
         -:   93:    }
-      309:   94:    a->window_cur++;
+      307:   94:    a->window_cur++;
         -:   95:
         -:   96:    // iterate slabs
-    14987:   97:    for (n = POWER_SMALLEST; n < MAX_NUMBER_OF_SLAB_CLASSES; n++) {
-    14785:   98:        int w_offset = n * a->window_size;
-    14785:   99:        struct window_data *wd = &a->window_data[w_offset + (a->window_cur % a->window_size)];
-    14785:  100:        memset(wd, 0, sizeof(struct window_data));
+    14866:   97:    for (n = POWER_SMALLEST; n < MAX_NUMBER_OF_SLAB_CLASSES; n++) {
+    14666:   98:        int w_offset = n * a->window_size;
+    14666:   99:        struct window_data *wd = &a->window_data[w_offset + (a->window_cur % a->window_size)];
+    14666:  100:        memset(wd, 0, sizeof(struct window_data));
         -:  101:
         -:  102:        // if page delta, or evicted delta, mark window dirty
         -:  103:        // (or outofmemory)
-    14785:  104:        uint64_t evicted_delta = a->iam_after[n].evicted - a->iam_before[n].evicted;
-    14785:  105:        if (evicted_delta > 0) {
+    14666:  104:        uint64_t evicted_delta = a->iam_after[n].evicted - a->iam_before[n].evicted;
+    14666:  105:        if (evicted_delta > 0) {
         -:  106:            // FIXME: the python script is using floats. we have ints.
        15:  107:            wd->evicted_ratio = (float) evicted_delta / evicted_total;
        15:  108:            wd->evicted_seen = 1;
        15:  109:            wd->dirty = 1;
         -:  110:        }
         -:  111:
-    14785:  112:        if (a->iam_after[n].outofmemory - a->iam_before[n].outofmemory > 0) {
+    14666:  112:        if (a->iam_after[n].outofmemory - a->iam_before[n].outofmemory > 0) {
     #####:  113:            wd->dirty = 1;
         -:  114:        }
-    14785:  115:        if (a->sam_after[n].total_pages - a->sam_before[n].total_pages > 0) {
-       77:  116:            wd->dirty = 1;
+    14666:  115:        if (a->sam_after[n].total_pages - a->sam_before[n].total_pages > 0) {
+       83:  116:            wd->dirty = 1;
         -:  117:        }
         -:  118:
         -:  119:        // set age into window
-    14785:  120:        wd->age = a->iam_after[n].age;
+    14666:  120:        wd->age = a->iam_after[n].age;
         -:  121:
         -:  122:        // summarize the window-up-to-now.
-    14785:  123:        memset(&w_sum, 0, sizeof(struct window_data));
-    14785:  124:        window_sum(&a->window_data[w_offset], &w_sum, a->window_size);
+    14666:  123:        memset(&w_sum, 0, sizeof(struct window_data));
+    14666:  124:        window_sum(&a->window_data[w_offset], &w_sum, a->window_size);
         -:  125:
         -:  126:        // grab age as average of window total
-    14785:  127:        uint64_t age = w_sum.age / a->window_size;
+    14666:  127:        uint64_t age = w_sum.age / a->window_size;
         -:  128:
         -:  129:        // if > N free chunks and not dirty, make decision.
-    14785:  130:        if (a->sam_after[n].free_chunks > a->sam_after[n].chunks_per_page * MIN_PAGES_FOR_RECLAIM) {
+    14666:  130:        if (a->sam_after[n].free_chunks > a->sam_after[n].chunks_per_page * MIN_PAGES_FOR_RECLAIM) {
       138:  131:            if (w_sum.dirty == 0) {
       107:  132:                *src = n;
       107:  133:                *dst = 0;
@@ -141,7 +141,7 @@
         -:  137:        }
         -:  138:
         -:  139:        // if oldest and have enough pages, is oldest
-    14678:  140:        if (age > oldest_age && a->sam_after[n].total_pages > MIN_PAGES_FOR_SOURCE) {
+    14559:  140:        if (age > oldest_age && a->sam_after[n].total_pages > MIN_PAGES_FOR_SOURCE) {
         6:  141:            oldest = n;
         6:  142:            oldest_age = age;
         -:  143:        }
@@ -149,25 +149,25 @@
         -:  145:        // grab evicted count from window
         -:  146:        // if > half the window and youngest, mark as youngest
         -:  147:        // or, if more than 25% of total evictions in the window.
-    14678:  148:        if (age < youngest_age && (w_sum.evicted_seen > a->window_size / 2
-    14601:  149:                    || w_sum.evicted_ratio / a->window_size > 0.25)) {
+    14559:  148:        if (age < youngest_age && (w_sum.evicted_seen > a->window_size / 2
+    14481:  149:                    || w_sum.evicted_ratio / a->window_size > 0.25)) {
         6:  150:            youngest = n;
         6:  151:            youngest_age = age;
         6:  152:            youngest_evicting = wd->evicted_seen ? true : false;
         -:  153:        }
         -:  154:    }
         -:  155:
-      309:  156:    memcpy(a->iam_before, a->iam_after,
+      307:  156:    memcpy(a->iam_before, a->iam_after,
         -:  157:            sizeof(item_stats_automove) * MAX_NUMBER_OF_SLAB_CLASSES);
-      309:  158:    memcpy(a->sam_before, a->sam_after,
+      307:  158:    memcpy(a->sam_before, a->sam_after,
         -:  159:            sizeof(slab_stats_automove) * MAX_NUMBER_OF_SLAB_CLASSES);
         -:  160:    // if we have a youngest and oldest, and oldest is outside the ratio,
         -:  161:    // also, only make decisions if window has filled once.
-      309:  162:    if (youngest != -1 && oldest != -1 && a->window_cur > a->window_size) {
+      307:  162:    if (youngest != -1 && oldest != -1 && a->window_cur > a->window_size) {
         2:  163:        if (youngest_age < ((double)oldest_age * a->max_age_ratio) && youngest_evicting) {
         1:  164:            *src = oldest;
         1:  165:            *dst = youngest;
         -:  166:        }
         -:  167:    }
-      309:  168:    return;
+      307:  168:    return;
         -:  169:}

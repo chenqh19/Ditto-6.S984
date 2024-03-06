@@ -241,29 +241,29 @@
         1:  237:}
         -:  238:
         -:  239:#ifndef HAVE_HTONLL
-    58842:  240:static uint64_t mc_swap64(uint64_t in) {
+    58667:  240:static uint64_t mc_swap64(uint64_t in) {
         -:  241:#ifdef ENDIAN_LITTLE
         -:  242:    /* Little endian, flip the bytes around until someone makes a faster/better
         -:  243:    * way to do this. */
-    58842:  244:    int64_t rv = 0;
-    58842:  245:    int i = 0;
-   529578:  246:     for(i = 0; i<8; i++) {
-   470736:  247:        rv = (rv << 8) | (in & 0xff);
-   470736:  248:        in >>= 8;
+    58667:  244:    int64_t rv = 0;
+    58667:  245:    int i = 0;
+   528003:  246:     for(i = 0; i<8; i++) {
+   469336:  247:        rv = (rv << 8) | (in & 0xff);
+   469336:  248:        in >>= 8;
         -:  249:     }
-    58842:  250:    return rv;
+    58667:  250:    return rv;
         -:  251:#else
         -:  252:    /* big-endian machines don't need byte swapping */
         -:  253:    return in;
         -:  254:#endif
         -:  255:}
         -:  256:
-    38918:  257:uint64_t ntohll(uint64_t val) {
-    38918:  258:   return mc_swap64(val);
+    38844:  257:uint64_t ntohll(uint64_t val) {
+    38844:  258:   return mc_swap64(val);
         -:  259:}
         -:  260:
-    19924:  261:uint64_t htonll(uint64_t val) {
-    19924:  262:   return mc_swap64(val);
+    19823:  261:uint64_t htonll(uint64_t val) {
+    19823:  262:   return mc_swap64(val);
         -:  263:}
         -:  264:#endif
         -:  265:

@@ -293,47 +293,47 @@
         -:  289: *      command  = tokens[ix].value;
         -:  290: *   }
         -:  291: */
-   566859:  292:static size_t tokenize_command(char *command, token_t *tokens, const size_t max_tokens) {
-   566859:  293:    char *s, *e;
-   566859:  294:    size_t ntokens = 0;
-  566859*:  295:    assert(command != NULL && tokens != NULL && max_tokens > 1);
-   566859:  296:    size_t len = strlen(command);
-   566859:  297:    unsigned int i = 0;
+   566839:  292:static size_t tokenize_command(char *command, token_t *tokens, const size_t max_tokens) {
+   566839:  293:    char *s, *e;
+   566839:  294:    size_t ntokens = 0;
+  566839*:  295:    assert(command != NULL && tokens != NULL && max_tokens > 1);
+   566839:  296:    size_t len = strlen(command);
+   566839:  297:    unsigned int i = 0;
         -:  298:
-   566859:  299:    s = e = command;
- 28442129:  300:    for (i = 0; i < len; i++) {
- 27876115:  301:        if (*e == ' ') {
-  1657611:  302:            if (s != e) {
-  1657597:  303:                tokens[ntokens].value = s;
-  1657597:  304:                tokens[ntokens].length = e - s;
-  1657597:  305:                ntokens++;
-  1657597:  306:                *e = '\0';
-  1657597:  307:                if (ntokens == max_tokens - 1) {
+   566839:  299:    s = e = command;
+ 28442015:  300:    for (i = 0; i < len; i++) {
+ 27876021:  301:        if (*e == ' ') {
+  1657612:  302:            if (s != e) {
+  1657598:  303:                tokens[ntokens].value = s;
+  1657598:  304:                tokens[ntokens].length = e - s;
+  1657598:  305:                ntokens++;
+  1657598:  306:                *e = '\0';
+  1657598:  307:                if (ntokens == max_tokens - 1) {
       845:  308:                    e++;
       845:  309:                    s = e; /* so we don't add an extra token */
       845:  310:                    break;
         -:  311:                }
         -:  312:            }
-  1656766:  313:            s = e + 1;
+  1656767:  313:            s = e + 1;
         -:  314:        }
- 27875270:  315:        e++;
+ 27875176:  315:        e++;
         -:  316:    }
         -:  317:
-   566859:  318:    if (s != e) {
-   566009:  319:        tokens[ntokens].value = s;
-   566009:  320:        tokens[ntokens].length = e - s;
-   566009:  321:        ntokens++;
+   566839:  318:    if (s != e) {
+   565989:  319:        tokens[ntokens].value = s;
+   565989:  320:        tokens[ntokens].length = e - s;
+   565989:  321:        ntokens++;
         -:  322:    }
         -:  323:
         -:  324:    /*
         -:  325:     * If we scanned the whole string, the terminal value pointer is null,
         -:  326:     * otherwise it is the first unprocessed character.
         -:  327:     */
-   566859:  328:    tokens[ntokens].value =  *e == '\0' ? NULL : e;
-   566859:  329:    tokens[ntokens].length = 0;
-   566859:  330:    ntokens++;
+   566839:  328:    tokens[ntokens].value =  *e == '\0' ? NULL : e;
+   566839:  329:    tokens[ntokens].length = 0;
+   566839:  330:    ntokens++;
         -:  331:
-   566859:  332:    return ntokens;
+   566839:  332:    return ntokens;
         -:  333:}
         -:  334:
         5:  335:int try_read_command_asciiauth(conn *c) {
@@ -448,14 +448,14 @@
         -:  444:    return 1;
         -:  445:}
         -:  446:
-   566442:  447:int try_read_command_ascii(conn *c) {
-   566442:  448:    char *el, *cont;
+   566422:  447:int try_read_command_ascii(conn *c) {
+   566422:  448:    char *el, *cont;
         -:  449:
-   566442:  450:    if (c->rbytes == 0)
+   566422:  450:    if (c->rbytes == 0)
         -:  451:        return 0;
         -:  452:
-   566442:  453:    el = memchr(c->rcurr, '\n', c->rbytes);
-   566442:  454:    if (!el) {
+   566422:  453:    el = memchr(c->rcurr, '\n', c->rbytes);
+   566422:  454:    if (!el) {
       435:  455:        if (c->rbytes > 2048) {
         -:  456:            /*
         -:  457:             * We didn't have a '\n' in the first few k. This _has_ to be a
@@ -486,21 +486,21 @@
         -:  482:
       433:  483:        return 0;
         -:  484:    }
-   566007:  485:    cont = el + 1;
-   566007:  486:    if ((el - c->rcurr) > 1 && *(el - 1) == '\r') {
-   485986:  487:        el--;
+   565987:  485:    cont = el + 1;
+   565987:  486:    if ((el - c->rcurr) > 1 && *(el - 1) == '\r') {
+   485966:  487:        el--;
         -:  488:    }
-   566007:  489:    *el = '\0';
+   565987:  489:    *el = '\0';
         -:  490:
-  566007*:  491:    assert(cont <= (c->rcurr + c->rbytes));
+  565987*:  491:    assert(cont <= (c->rcurr + c->rbytes));
         -:  492:
-   566007:  493:    c->last_cmd_time = current_time;
-   566007:  494:    process_command_ascii(c, c->rcurr);
+   565987:  493:    c->last_cmd_time = current_time;
+   565987:  494:    process_command_ascii(c, c->rcurr);
         -:  495:
-   566007:  496:    c->rbytes -= (cont - c->rcurr);
-   566007:  497:    c->rcurr = cont;
+   565987:  496:    c->rbytes -= (cont - c->rcurr);
+   565987:  497:    c->rcurr = cont;
         -:  498:
-  566007*:  499:    assert(c->rcurr <= (c->rbuf + c->rsize));
+  565987*:  499:    assert(c->rcurr <= (c->rbuf + c->rsize));
         -:  500:
         -:  501:    return 1;
         -:  502:}
@@ -745,23 +745,23 @@
         -:  741:    }
        10:  742:}
         -:  743:
-     5380:  744:static void process_stat(conn *c, token_t *tokens, const size_t ntokens) {
-     5380:  745:    const char *subcommand = tokens[SUBCOMMAND_TOKEN].value;
-    5380*:  746:    assert(c != NULL);
+     5360:  744:static void process_stat(conn *c, token_t *tokens, const size_t ntokens) {
+     5360:  745:    const char *subcommand = tokens[SUBCOMMAND_TOKEN].value;
+    5360*:  746:    assert(c != NULL);
         -:  747:
-     5380:  748:    if (ntokens < 2) {
+     5360:  748:    if (ntokens < 2) {
     #####:  749:        out_string(c, "CLIENT_ERROR bad command line");
     #####:  750:        return;
         -:  751:    }
         -:  752:
-     5380:  753:    if (ntokens == 2) {
-     3775:  754:        server_stats(&append_stats, c);
-     3775:  755:        (void)get_stats(NULL, 0, &append_stats, c);
-     1605:  756:    } else if (strcmp(subcommand, "reset") == 0) {
+     5360:  753:    if (ntokens == 2) {
+     3754:  754:        server_stats(&append_stats, c);
+     3754:  755:        (void)get_stats(NULL, 0, &append_stats, c);
+     1606:  756:    } else if (strcmp(subcommand, "reset") == 0) {
         3:  757:        stats_reset();
         3:  758:        out_string(c, "RESET");
         3:  759:        return;
-     1602:  760:    } else if (strcmp(subcommand, "detail") == 0) {
+     1603:  760:    } else if (strcmp(subcommand, "detail") == 0) {
         -:  761:        /* NOTE: how to tackle detail with binary? */
        10:  762:        if (ntokens < 4)
     #####:  763:            process_stats_detail(c, "");  /* outputs the error message */
@@ -769,9 +769,9 @@
        10:  765:            process_stats_detail(c, tokens[2].value);
         -:  766:        /* Output already generated */
        10:  767:        return;
-     1592:  768:    } else if (strcmp(subcommand, "settings") == 0) {
+     1593:  768:    } else if (strcmp(subcommand, "settings") == 0) {
        20:  769:        process_stat_settings(&append_stats, c);
-     1572:  770:    } else if (strcmp(subcommand, "cachedump") == 0) {
+     1573:  770:    } else if (strcmp(subcommand, "cachedump") == 0) {
         3:  771:        char *buf;
         3:  772:        unsigned int bytes, id, limit = 0;
         -:  773:
@@ -799,10 +799,10 @@
         2:  795:        buf = item_cachedump(id, limit, &bytes);
         2:  796:        write_and_free(c, buf, bytes);
         2:  797:        return;
-     1569:  798:    } else if (strcmp(subcommand, "conns") == 0) {
+     1570:  798:    } else if (strcmp(subcommand, "conns") == 0) {
         4:  799:        process_stats_conns(&append_stats, c);
         -:  800:#ifdef EXTSTORE
-     1565:  801:    } else if (strcmp(subcommand, "extstore") == 0) {
+     1566:  801:    } else if (strcmp(subcommand, "extstore") == 0) {
     #####:  802:        process_extstore_stats(&append_stats, c);
         -:  803:#endif
         -:  804:#ifdef PROXY
@@ -814,27 +814,27 @@
         -:  810:    } else {
         -:  811:        /* getting here means that the subcommand is either engine specific or
         -:  812:           is invalid. query the engine and see. */
-     1565:  813:        if (get_stats(subcommand, strlen(subcommand), &append_stats, c)) {
-     1565:  814:            if (c->stats.buffer == NULL) {
+     1566:  813:        if (get_stats(subcommand, strlen(subcommand), &append_stats, c)) {
+     1566:  814:            if (c->stats.buffer == NULL) {
     #####:  815:                out_of_memory(c, "SERVER_ERROR out of memory writing stats");
         -:  816:            } else {
-     1565:  817:                write_and_free(c, c->stats.buffer, c->stats.offset);
-     1565:  818:                c->stats.buffer = NULL;
+     1566:  817:                write_and_free(c, c->stats.buffer, c->stats.offset);
+     1566:  818:                c->stats.buffer = NULL;
         -:  819:            }
         -:  820:        } else {
     #####:  821:            out_string(c, "ERROR");
         -:  822:        }
-     1565:  823:        return;
+     1566:  823:        return;
         -:  824:    }
         -:  825:
         -:  826:    /* append terminator and start the transfer */
-     3799:  827:    append_stats(NULL, 0, NULL, 0, c);
+     3778:  827:    append_stats(NULL, 0, NULL, 0, c);
         -:  828:
-     3799:  829:    if (c->stats.buffer == NULL) {
+     3778:  829:    if (c->stats.buffer == NULL) {
     #####:  830:        out_of_memory(c, "SERVER_ERROR out of memory writing stats");
         -:  831:    } else {
-     3799:  832:        write_and_free(c, c->stats.buffer, c->stats.offset);
-     3799:  833:        c->stats.buffer = NULL;
+     3778:  832:        write_and_free(c, c->stats.buffer, c->stats.offset);
+     3778:  833:        c->stats.buffer = NULL;
         -:  834:    }
         -:  835:}
         -:  836:
@@ -2782,17 +2782,17 @@
         -: 2778:// we can't drop out and back in again.
         -: 2779:// Leaving this note here to spend more time on a fix when necessary, or if an
         -: 2780:// opportunity becomes obvious.
-   566007: 2781:void process_command_ascii(conn *c, char *command) {
+   565987: 2781:void process_command_ascii(conn *c, char *command) {
         -: 2782:
-   566007: 2783:    token_t tokens[MAX_TOKENS];
-   566007: 2784:    size_t ntokens;
-   566007: 2785:    int comm;
+   565987: 2783:    token_t tokens[MAX_TOKENS];
+   565987: 2784:    size_t ntokens;
+   565987: 2785:    int comm;
         -: 2786:
-  566007*: 2787:    assert(c != NULL);
+  565987*: 2787:    assert(c != NULL);
         -: 2788:
-   566007: 2789:    MEMCACHED_PROCESS_COMMAND_START(c->sfd, c->rcurr, c->rbytes);
+   565987: 2789:    MEMCACHED_PROCESS_COMMAND_START(c->sfd, c->rcurr, c->rbytes);
         -: 2790:
-   566007: 2791:    if (settings.verbose > 1)
+   565987: 2791:    if (settings.verbose > 1)
     #####: 2792:        fprintf(stderr, "<%d %s\n", c->sfd, command);
         -: 2793:
         -: 2794:    /*
@@ -2801,23 +2801,23 @@
         -: 2797:     */
         -: 2798:
         -: 2799:    // Prep the response object for this query.
-   566007: 2800:    if (!resp_start(c)) {
+   565987: 2800:    if (!resp_start(c)) {
         1: 2801:        conn_set_state(c, conn_closing);
         1: 2802:        return;
         -: 2803:    }
         -: 2804:
-   566006: 2805:    c->thread->cur_sfd = c->sfd; // cuddle sfd for logging.
-   566006: 2806:    ntokens = tokenize_command(command, tokens, MAX_TOKENS);
+   565986: 2805:    c->thread->cur_sfd = c->sfd; // cuddle sfd for logging.
+   565986: 2806:    ntokens = tokenize_command(command, tokens, MAX_TOKENS);
         -: 2807:    // All commands need a minimum of two tokens: cmd and NULL finalizer
         -: 2808:    // There are also no valid commands shorter than two bytes.
-   566006: 2809:    if (ntokens < 2 || tokens[COMMAND_TOKEN].length < 2) {
+   565986: 2809:    if (ntokens < 2 || tokens[COMMAND_TOKEN].length < 2) {
         5: 2810:        out_string(c, "ERROR");
         5: 2811:        return;
         -: 2812:    }
         -: 2813:
         -: 2814:    // Meta commands are all 2-char in length.
-   566001: 2815:    char first = tokens[COMMAND_TOKEN].value[0];
-   566001: 2816:    if (first == 'm' && tokens[COMMAND_TOKEN].length == 2) {
+   565981: 2815:    char first = tokens[COMMAND_TOKEN].value[0];
+   565981: 2816:    if (first == 'm' && tokens[COMMAND_TOKEN].length == 2) {
      1388: 2817:        switch (tokens[COMMAND_TOKEN].value[1]) {
      1314: 2818:            case 'g':
      1314: 2819:                process_mget_command(c, tokens, ntokens);
@@ -2843,7 +2843,7 @@
     #####: 2839:                out_string(c, "ERROR");
     #####: 2840:                break;
         -: 2841:        }
-   564613: 2842:    } else if (first == 'g') {
+   564593: 2842:    } else if (first == 'g') {
         -: 2843:        // Various get commands are very common.
   112696*: 2844:        WANT_TOKENS_MIN(ntokens, 3);
    112696: 2845:        if (strcmp(tokens[COMMAND_TOKEN].value, "get") == 0) {
@@ -2861,14 +2861,14 @@
         -: 2857:        } else {
     #####: 2858:            out_string(c, "ERROR");
         -: 2859:        }
-   451917: 2860:    } else if (first == 's') {
-   291752: 2861:        if (strcmp(tokens[COMMAND_TOKEN].value, "set") == 0 && (comm = NREAD_SET)) {
+   451897: 2860:    } else if (first == 's') {
+   291732: 2861:        if (strcmp(tokens[COMMAND_TOKEN].value, "set") == 0 && (comm = NREAD_SET)) {
         -: 2862:
   286295*: 2863:            WANT_TOKENS_OR(ntokens, 6, 7);
    286295: 2864:            process_update_command(c, tokens, ntokens, comm, false);
-     5457: 2865:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "stats") == 0) {
+     5437: 2865:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "stats") == 0) {
         -: 2866:
-     5380: 2867:            process_stat(c, tokens, ntokens);
+     5360: 2867:            process_stat(c, tokens, ntokens);
        77: 2868:        } else if (strcmp(tokens[COMMAND_TOKEN].value, "shutdown") == 0) {
         -: 2869:
         5: 2870:            process_shutdown_command(c, tokens, ntokens);

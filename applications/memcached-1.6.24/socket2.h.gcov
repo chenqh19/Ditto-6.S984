@@ -65,10 +65,10 @@
         -:   61:		 "destination buffer");
         -:   62:
         -:   63:__fortify_function ssize_t
-       21:   64:recvfrom (int __fd, void *__restrict __buf, size_t __n, int __flags,
+       18:   64:recvfrom (int __fd, void *__restrict __buf, size_t __n, int __flags,
         -:   65:	  __SOCKADDR_ARG __addr, socklen_t *__restrict __addr_len)
         -:   66:{
-       21:   67:  if (__bos0 (__buf) != (size_t) -1)
+       18:   67:  if (__bos0 (__buf) != (size_t) -1)
         -:   68:    {
     #####:   69:      if (!__builtin_constant_p (__n))
     #####:   70:	return __recvfrom_chk (__fd, __buf, __n, __bos0 (__buf), __flags,
@@ -77,5 +77,5 @@
     #####:   73:	return __recvfrom_chk_warn (__fd, __buf, __n, __bos0 (__buf), __flags,
         -:   74:				    __addr, __addr_len);
         -:   75:    }
-       21:   76:  return __recvfrom_alias (__fd, __buf, __n, __flags, __addr, __addr_len);
+       18:   76:  return __recvfrom_alias (__fd, __buf, __n, __flags, __addr, __addr_len);
         -:   77:}

@@ -122,29 +122,29 @@
         -:  118: * without first locking and removing from the LRU.
         -:  119: */
         -:  120:
- 1069778*:  121:void item_lock(uint32_t hv) {
-   72252*:  122:    mutex_lock(&item_locks[hv & hashmask(item_lock_hashpower)]);
-    72252:  123:}
+ 1069777*:  121:void item_lock(uint32_t hv) {
+   72249*:  122:    mutex_lock(&item_locks[hv & hashmask(item_lock_hashpower)]);
+    72249:  123:}
         -:  124:
-   710857:  125:void *item_trylock(uint32_t hv) {
-   710857:  126:    pthread_mutex_t *lock = &item_locks[hv & hashmask(item_lock_hashpower)];
-   710857:  127:    if (pthread_mutex_trylock(lock) == 0) {
-   710729:  128:        return lock;
+   710834:  125:void *item_trylock(uint32_t hv) {
+   710834:  126:    pthread_mutex_t *lock = &item_locks[hv & hashmask(item_lock_hashpower)];
+   710834:  127:    if (pthread_mutex_trylock(lock) == 0) {
+   710706:  128:        return lock;
         -:  129:    }
         -:  130:    return NULL;
         -:  131:}
         -:  132:
-   647729:  133:void item_trylock_unlock(void *lock) {
-   647729:  134:    mutex_unlock((pthread_mutex_t *) lock);
-   647729:  135:}
+   647296:  133:void item_trylock_unlock(void *lock) {
+   647296:  134:    mutex_unlock((pthread_mutex_t *) lock);
+   647296:  135:}
         -:  136:
- 1132778*:  137:void item_unlock(uint32_t hv) {
-  277465*:  138:    mutex_unlock(&item_locks[hv & hashmask(item_lock_hashpower)]);
-   277465:  139:}
+ 1133187*:  137:void item_unlock(uint32_t hv) {
+  277867*:  138:    mutex_unlock(&item_locks[hv & hashmask(item_lock_hashpower)]);
+   277867:  139:}
         -:  140:
       119:  141:static void wait_for_thread_registration(int nthreads) {
-      346:  142:    while (init_count < nthreads) {
-      237:  143:        pthread_cond_wait(&init_cond, &init_lock);
+      344:  142:    while (init_count < nthreads) {
+      236:  143:        pthread_cond_wait(&init_cond, &init_lock);
         -:  144:    }
         -:  145:}
         -:  146:
@@ -228,7 +228,7 @@
        10:  224:    for (i = 0; i < settings.num_threads; i++) {
         8:  225:        notify_worker_fd(&threads[i], 0, queue_stop);
         -:  226:    }
-        8:  227:    wait_for_thread_registration(settings.num_threads);
+        9:  227:    wait_for_thread_registration(settings.num_threads);
         2:  228:    pthread_mutex_unlock(&init_lock);
         -:  229:
         -:  230:    // All of the workers are hung but haven't done cleanup yet.
@@ -585,16 +585,16 @@
         -:  581: * Processes an incoming "connection event" item. This is called when
         -:  582: * input arrives on the libevent wakeup pipe.
         -:  583: */
-     2179:  584:static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) {
-     2179:  585:    LIBEVENT_THREAD *me = arg;
-     2179:  586:    CQ_ITEM *item;
-     2179:  587:    conn *c;
-     2179:  588:    uint64_t ev_count = 0; // max number of events to loop through this run.
+     2150:  584:static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) {
+     2150:  585:    LIBEVENT_THREAD *me = arg;
+     2150:  586:    CQ_ITEM *item;
+     2150:  587:    conn *c;
+     2150:  588:    uint64_t ev_count = 0; // max number of events to loop through this run.
         -:  589:#ifdef HAVE_EVENTFD
         -:  590:    // NOTE: unlike pipe we aren't limiting the number of events per read.
         -:  591:    // However we do limit the number of queue pulls to what the count was at
         -:  592:    // the time of this function firing.
-     2179:  593:    if (read(fd, &ev_count, sizeof(uint64_t)) != sizeof(uint64_t)) {
+     2150:  593:    if (read(fd, &ev_count, sizeof(uint64_t)) != sizeof(uint64_t)) {
     #####:  594:        if (settings.verbose > 0)
     #####:  595:            fprintf(stderr, "Can't read from libevent pipe\n");
     #####:  596:        return;
@@ -610,7 +610,7 @@
         -:  606:    }
         -:  607:#endif
         -:  608:
-     4409:  609:    for (int x = 0; x < ev_count; x++) {
+     4380:  609:    for (int x = 0; x < ev_count; x++) {
      2230:  610:        item = cq_pop(me->ev_queue);
      2230:  611:        if (item == NULL) {
         -:  612:            return;
@@ -867,11 +867,11 @@
         -:  863:/*
         -:  864: * Allocates a new item.
         -:  865: */
-   327743:  866:item *item_alloc(const char *key, size_t nkey, client_flags_t flags, rel_time_t exptime, int nbytes) {
-   327743:  867:    item *it;
+   327739:  866:item *item_alloc(const char *key, size_t nkey, client_flags_t flags, rel_time_t exptime, int nbytes) {
+   327739:  867:    item *it;
         -:  868:    /* do_item_alloc handles its own locks */
-   327743:  869:    it = do_item_alloc(key, nkey, flags, exptime, nbytes);
-   327743:  870:    return it;
+   327739:  869:    it = do_item_alloc(key, nkey, flags, exptime, nbytes);
+   327739:  870:    return it;
         -:  871:}
         -:  872:
         -:  873:/*
@@ -891,22 +891,22 @@
         -:  887:// returns an item with the item lock held.
         -:  888:// lock will still be held even if return is NULL, allowing caller to replace
         -:  889:// an item atomically if desired.
-   142213:  890:item *item_get_locked(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update, uint32_t *hv) {
-   142213:  891:    item *it;
-   142213:  892:    *hv = hash(key, nkey);
-   142213:  893:    item_lock(*hv);
-   142213:  894:    it = do_item_get(key, nkey, *hv, t, do_update);
-   142213:  895:    return it;
+   142208:  890:item *item_get_locked(const char *key, const size_t nkey, LIBEVENT_THREAD *t, const bool do_update, uint32_t *hv) {
+   142208:  891:    item *it;
+   142208:  892:    *hv = hash(key, nkey);
+   142208:  893:    item_lock(*hv);
+   142208:  894:    it = do_item_get(key, nkey, *hv, t, do_update);
+   142208:  895:    return it;
         -:  896:}
         -:  897:
-     2102:  898:item *item_touch(const char *key, size_t nkey, uint32_t exptime, LIBEVENT_THREAD *t) {
-     2102:  899:    item *it;
-     2102:  900:    uint32_t hv;
-     2102:  901:    hv = hash(key, nkey);
-     2102:  902:    item_lock(hv);
-     2102:  903:    it = do_item_touch(key, nkey, exptime, hv, t);
-     2102:  904:    item_unlock(hv);
-     2102:  905:    return it;
+     2126:  898:item *item_touch(const char *key, size_t nkey, uint32_t exptime, LIBEVENT_THREAD *t) {
+     2126:  899:    item *it;
+     2126:  900:    uint32_t hv;
+     2126:  901:    hv = hash(key, nkey);
+     2126:  902:    item_lock(hv);
+     2126:  903:    it = do_item_touch(key, nkey, exptime, hv, t);
+     2126:  904:    item_unlock(hv);
+     2126:  905:    return it;
         -:  906:}
         -:  907:
         -:  908:/*
@@ -927,22 +927,22 @@
         -:  923: * Decrements the reference count on an item and adds it to the freelist if
         -:  924: * needed.
         -:  925: */
-   386067:  926:void item_remove(item *item) {
-   386067:  927:    uint32_t hv;
-   386067:  928:    hv = hash(ITEM_key(item), item->nkey);
+   386062:  926:void item_remove(item *item) {
+   386062:  927:    uint32_t hv;
+   386062:  928:    hv = hash(ITEM_key(item), item->nkey);
         -:  929:
-   386067:  930:    item_lock(hv);
-   386067:  931:    do_item_remove(item);
-   386067:  932:    item_unlock(hv);
-   386067:  933:}
+   386062:  930:    item_lock(hv);
+   386062:  931:    do_item_remove(item);
+   386062:  932:    item_unlock(hv);
+   386062:  933:}
         -:  934:
         -:  935:/*
         -:  936: * Replaces one item with another in the hashtable.
         -:  937: * Unprotected by a mutex lock since the core server does not require
         -:  938: * it to be thread-safe.
         -:  939: */
-    58731:  940:int item_replace(item *old_it, item *new_it, const uint32_t hv) {
-    58731:  941:    return do_item_replace(old_it, new_it, hv);
+    58729:  940:int item_replace(item *old_it, item *new_it, const uint32_t hv) {
+    58729:  941:    return do_item_replace(old_it, new_it, hv);
         -:  942:}
         -:  943:
         -:  944:/*
@@ -959,42 +959,42 @@
         -:  955:/*
         -:  956: * Does arithmetic on a numeric item value.
         -:  957: */
-      397:  958:enum delta_result_type add_delta(LIBEVENT_THREAD *t, const char *key,
+      389:  958:enum delta_result_type add_delta(LIBEVENT_THREAD *t, const char *key,
         -:  959:                                 const size_t nkey, bool incr,
         -:  960:                                 const int64_t delta, char *buf,
         -:  961:                                 uint64_t *cas) {
-      397:  962:    enum delta_result_type ret;
-      397:  963:    uint32_t hv;
+      389:  962:    enum delta_result_type ret;
+      389:  963:    uint32_t hv;
         -:  964:
-      397:  965:    hv = hash(key, nkey);
-      397:  966:    item_lock(hv);
-      397:  967:    ret = do_add_delta(t, key, nkey, incr, delta, buf, cas, hv, NULL);
-      397:  968:    item_unlock(hv);
-      397:  969:    return ret;
+      389:  965:    hv = hash(key, nkey);
+      389:  966:    item_lock(hv);
+      389:  967:    ret = do_add_delta(t, key, nkey, incr, delta, buf, cas, hv, NULL);
+      389:  968:    item_unlock(hv);
+      389:  969:    return ret;
         -:  970:}
         -:  971:
         -:  972:/*
         -:  973: * Stores an item in the cache (high level, obeys set/add/replace semantics)
         -:  974: */
-   327374:  975:enum store_item_type store_item(item *item, int comm, LIBEVENT_THREAD *t, int *nbytes, uint64_t *cas, bool cas_stale) {
-   327374:  976:    enum store_item_type ret;
-   327374:  977:    uint32_t hv;
+   327370:  975:enum store_item_type store_item(item *item, int comm, LIBEVENT_THREAD *t, int *nbytes, uint64_t *cas, bool cas_stale) {
+   327370:  976:    enum store_item_type ret;
+   327370:  977:    uint32_t hv;
         -:  978:
-   327374:  979:    hv = hash(ITEM_key(item), item->nkey);
-   327374:  980:    item_lock(hv);
-   327374:  981:    ret = do_store_item(item, comm, t, hv, nbytes, cas, cas_stale);
-   327374:  982:    item_unlock(hv);
-   327374:  983:    return ret;
+   327370:  979:    hv = hash(ITEM_key(item), item->nkey);
+   327370:  980:    item_lock(hv);
+   327370:  981:    ret = do_store_item(item, comm, t, hv, nbytes, cas, cas_stale);
+   327370:  982:    item_unlock(hv);
+   327370:  983:    return ret;
         -:  984:}
         -:  985:
         -:  986:/******************************* GLOBAL STATS ******************************/
         -:  987:
-  640567*:  988:void STATS_LOCK(void) {
-  640567*:  989:    pthread_mutex_lock(&stats_lock);
-   640567:  990:}
+  640042*:  988:void STATS_LOCK(void) {
+  640042*:  989:    pthread_mutex_lock(&stats_lock);
+   640042:  990:}
         -:  991:
-  640567*:  992:void STATS_UNLOCK(void) {
-  640567*:  993:    pthread_mutex_unlock(&stats_lock);
+  640042*:  992:void STATS_UNLOCK(void) {
+  640042*:  993:    pthread_mutex_unlock(&stats_lock);
     #####:  994:}
         -:  995:
         3:  996:void threadlocal_stats_reset(void) {
@@ -1020,57 +1020,57 @@
         -: 1016:    }
         3: 1017:}
         -: 1018:
-     5378: 1019:void threadlocal_stats_aggregate(struct thread_stats *stats) {
-     5378: 1020:    int ii, sid;
+     5360: 1019:void threadlocal_stats_aggregate(struct thread_stats *stats) {
+     5360: 1020:    int ii, sid;
         -: 1021:
         -: 1022:    /* The struct has a mutex, but we can safely set the whole thing
         -: 1023:     * to zero since it is unused when aggregating. */
-     5378: 1024:    memset(stats, 0, sizeof(*stats));
+     5360: 1024:    memset(stats, 0, sizeof(*stats));
         -: 1025:
-    26946: 1026:    for (ii = 0; ii < settings.num_threads; ++ii) {
-    21568: 1027:        pthread_mutex_lock(&threads[ii].stats.mutex);
+    26856: 1026:    for (ii = 0; ii < settings.num_threads; ++ii) {
+    21496: 1027:        pthread_mutex_lock(&threads[ii].stats.mutex);
         -: 1028:#define X(name) stats->name += threads[ii].stats.name;
-    21568: 1029:        THREAD_STATS_FIELDS
+    21496: 1029:        THREAD_STATS_FIELDS
         -: 1030:#ifdef EXTSTORE
-    21568: 1031:        EXTSTORE_THREAD_STATS_FIELDS
+    21496: 1031:        EXTSTORE_THREAD_STATS_FIELDS
         -: 1032:#endif
         -: 1033:#ifdef PROXY
         -: 1034:        PROXY_THREAD_STATS_FIELDS
         -: 1035:#endif
         -: 1036:#undef X
         -: 1037:
-  1401920: 1038:        for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
+  1397240: 1038:        for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
         -: 1039:#define X(name) stats->slab_stats[sid].name += \
         -: 1040:            threads[ii].stats.slab_stats[sid].name;
-  1380352: 1041:            SLAB_STATS_FIELDS
+  1375744: 1041:            SLAB_STATS_FIELDS
         -: 1042:#undef X
         -: 1043:        }
         -: 1044:
-  5542976: 1045:        for (sid = 0; sid < POWER_LARGEST; sid++) {
-  5521408: 1046:            stats->lru_hits[sid] +=
-  5521408: 1047:                threads[ii].stats.lru_hits[sid];
-  5521408: 1048:            stats->slab_stats[CLEAR_LRU(sid)].get_hits +=
-  5521408: 1049:                threads[ii].stats.lru_hits[sid];
+  5524472: 1045:        for (sid = 0; sid < POWER_LARGEST; sid++) {
+  5502976: 1046:            stats->lru_hits[sid] +=
+  5502976: 1047:                threads[ii].stats.lru_hits[sid];
+  5502976: 1048:            stats->slab_stats[CLEAR_LRU(sid)].get_hits +=
+  5502976: 1049:                threads[ii].stats.lru_hits[sid];
         -: 1050:        }
         -: 1051:
-    21568: 1052:        stats->read_buf_count += threads[ii].rbuf_cache->total;
-    21568: 1053:        stats->read_buf_bytes += threads[ii].rbuf_cache->total * READ_BUFFER_SIZE;
-    21568: 1054:        stats->read_buf_bytes_free += threads[ii].rbuf_cache->freecurr * READ_BUFFER_SIZE;
-    21568: 1055:        pthread_mutex_unlock(&threads[ii].stats.mutex);
+    21496: 1052:        stats->read_buf_count += threads[ii].rbuf_cache->total;
+    21496: 1053:        stats->read_buf_bytes += threads[ii].rbuf_cache->total * READ_BUFFER_SIZE;
+    21496: 1054:        stats->read_buf_bytes_free += threads[ii].rbuf_cache->freecurr * READ_BUFFER_SIZE;
+    21496: 1055:        pthread_mutex_unlock(&threads[ii].stats.mutex);
         -: 1056:    }
-     5378: 1057:}
+     5360: 1057:}
         -: 1058:
-     3797: 1059:void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out) {
-     3797: 1060:    int sid;
+     3778: 1059:void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out) {
+     3778: 1060:    int sid;
         -: 1061:
-     3797: 1062:    memset(out, 0, sizeof(*out));
+     3778: 1062:    memset(out, 0, sizeof(*out));
         -: 1063:
-   246805: 1064:    for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
+   245570: 1064:    for (sid = 0; sid < MAX_NUMBER_OF_SLAB_CLASSES; sid++) {
         -: 1065:#define X(name) out->name += stats->slab_stats[sid].name;
-   243008: 1066:        SLAB_STATS_FIELDS
+   241792: 1066:        SLAB_STATS_FIELDS
         -: 1067:#undef X
         -: 1068:    }
-     3797: 1069:}
+     3778: 1069:}
         -: 1070:
         -: 1071:static void memcached_thread_notify_init(struct thread_notify *tn) {
         -: 1072:#ifdef HAVE_EVENTFD

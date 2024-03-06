@@ -56,13 +56,13 @@
         -:   52:    }
         -:   53:}
         -:   54:
-   204474:   55:void storage_delete(void *e, item *it) {
-   204474:   56:    if (it->it_flags & ITEM_HDR) {
+   204462:   55:void storage_delete(void *e, item *it) {
+   204462:   56:    if (it->it_flags & ITEM_HDR) {
      9698:   57:        item_hdr *hdr = (item_hdr *)ITEM_data(it);
      9698:   58:        extstore_delete(e, hdr->page_id, hdr->page_version,
      9698:   59:                1, ITEM_ntotal(it));
         -:   60:    }
-   204474:   61:}
+   204462:   61:}
         -:   62:
         -:   63:// Function for the extra stats called from a protocol.
         -:   64:// NOTE: This either needs a name change or a wrapper, perhaps?
@@ -100,9 +100,9 @@
         -:   96:}
         -:   97:
         -:   98:// Additional storage stats for the main stats output.
-     3797:   99:void storage_stats(ADD_STAT add_stats, conn *c) {
-     3797:  100:    struct extstore_stats st;
-     3797:  101:    if (c->thread->storage) {
+     3778:   99:void storage_stats(ADD_STAT add_stats, conn *c) {
+     3778:  100:    struct extstore_stats st;
+     3778:  101:    if (c->thread->storage) {
      1049:  102:        STATS_LOCK();
      1049:  103:        APPEND_STAT("extstore_compact_lost", "%llu", (unsigned long long)stats.extstore_compact_lost);
      1049:  104:        APPEND_STAT("extstore_compact_rescues", "%llu", (unsigned long long)stats.extstore_compact_rescues);
@@ -127,7 +127,7 @@
      1049:  123:        APPEND_STAT("extstore_io_queue", "%llu", (unsigned long long)(st.io_queue));
         -:  124:    }
         -:  125:
-     3797:  126:}
+     3778:  126:}
         -:  127:
         -:  128:// This callback runs in the IO thread.
         -:  129:// TODO: Some or all of this should move to the
@@ -482,45 +482,45 @@
         -:  478: * WRITE FLUSH THREAD
         -:  479: */
         -:  480:
-  5405690:  481:static int storage_write(void *storage, const int clsid, const int item_age) {
-  5405690:  482:    int did_moves = 0;
-  5405690:  483:    struct lru_pull_tail_return it_info;
+  5444252:  481:static int storage_write(void *storage, const int clsid, const int item_age) {
+  5444252:  482:    int did_moves = 0;
+  5444252:  483:    struct lru_pull_tail_return it_info;
         -:  484:
-  5405690:  485:    it_info.it = NULL;
-  5405690:  486:    lru_pull_tail(clsid, COLD_LRU, 0, LRU_PULL_RETURN_ITEM, 0, &it_info);
+  5444252:  485:    it_info.it = NULL;
+  5444252:  486:    lru_pull_tail(clsid, COLD_LRU, 0, LRU_PULL_RETURN_ITEM, 0, &it_info);
         -:  487:    /* Item is locked, and we have a reference to it. */
-  5405690:  488:    if (it_info.it == NULL) {
+  5444252:  488:    if (it_info.it == NULL) {
         -:  489:        return did_moves;
         -:  490:    }
         -:  491:
-    62999:  492:    obj_io io;
-    62999:  493:    item *it = it_info.it;
+    63410:  492:    obj_io io;
+    63410:  493:    item *it = it_info.it;
         -:  494:    /* First, storage for the header object */
-    62999:  495:    size_t orig_ntotal = ITEM_ntotal(it);
-    62999:  496:    client_flags_t flags;
-    62999:  497:    if ((it->it_flags & ITEM_HDR) == 0 &&
-    61496:  498:            (item_age == 0 || current_time - it->time > item_age)) {
-    25019:  499:        FLAGS_CONV(it, flags);
-    25019:  500:        item *hdr_it = do_item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, sizeof(item_hdr));
+    63410:  495:    size_t orig_ntotal = ITEM_ntotal(it);
+    63410:  496:    client_flags_t flags;
+    63410:  497:    if ((it->it_flags & ITEM_HDR) == 0 &&
+    61913:  498:            (item_age == 0 || current_time - it->time > item_age)) {
+    24963:  499:        FLAGS_CONV(it, flags);
+    24963:  500:        item *hdr_it = do_item_alloc(ITEM_key(it), it->nkey, flags, it->exptime, sizeof(item_hdr));
         -:  501:        /* Run the storage write understanding the start of the item is dirty.
         -:  502:         * We will fill it (time/exptime/etc) from the header item on read.
         -:  503:         */
-    25019:  504:        if (hdr_it != NULL) {
-    25019:  505:            int bucket = (it->it_flags & ITEM_CHUNKED) ?
-    25019:  506:                PAGE_BUCKET_CHUNKED : PAGE_BUCKET_DEFAULT;
+    24963:  504:        if (hdr_it != NULL) {
+    24963:  505:            int bucket = (it->it_flags & ITEM_CHUNKED) ?
+    24963:  506:                PAGE_BUCKET_CHUNKED : PAGE_BUCKET_DEFAULT;
         -:  507:            // Compress soon to expire items into similar pages.
-    25019:  508:            if (it->exptime - current_time < settings.ext_low_ttl) {
-     1298:  509:                bucket = PAGE_BUCKET_LOWTTL;
+    24963:  508:            if (it->exptime - current_time < settings.ext_low_ttl) {
+     1303:  509:                bucket = PAGE_BUCKET_LOWTTL;
         -:  510:            }
-    25019:  511:            hdr_it->it_flags |= ITEM_HDR;
-    25019:  512:            io.len = orig_ntotal;
-    25019:  513:            io.mode = OBJ_IO_WRITE;
+    24963:  511:            hdr_it->it_flags |= ITEM_HDR;
+    24963:  512:            io.len = orig_ntotal;
+    24963:  513:            io.mode = OBJ_IO_WRITE;
         -:  514:            // NOTE: when the item is read back in, the slab mover
         -:  515:            // may see it. Important to have refcount>=2 or ~ITEM_LINKED
-   25019*:  516:            assert(it->refcount >= 2);
+   24963*:  516:            assert(it->refcount >= 2);
         -:  517:            // NOTE: write bucket vs free page bucket will disambiguate once
         -:  518:            // lowttl feature is better understood.
-    25019:  519:            if (extstore_write_request(storage, bucket, bucket, &io) == 0) {
+    24963:  519:            if (extstore_write_request(storage, bucket, bucket, &io) == 0) {
         -:  520:                // cuddle the hash value into the time field so we don't have
         -:  521:                // to recalculate it.
     22568:  522:                item *buf_it = (item *) io.buf;
@@ -569,13 +569,13 @@
    22568*:  565:                LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EXTSTORE_WRITE, it, bucket);
         -:  566:            } else {
         -:  567:                /* Failed to write for some reason, can't continue. */
-     2451:  568:                slabs_free(hdr_it, ITEM_ntotal(hdr_it), ITEM_clsid(hdr_it));
+     2395:  568:                slabs_free(hdr_it, ITEM_ntotal(hdr_it), ITEM_clsid(hdr_it));
         -:  569:            }
         -:  570:        }
         -:  571:    }
-    62999:  572:    do_item_remove(it);
-    62999:  573:    item_unlock(it_info.hv);
-    62999:  574:    return did_moves;
+    63410:  572:    do_item_remove(it);
+    63410:  573:    item_unlock(it_info.hv);
+    63410:  574:    return did_moves;
         -:  575:}
         -:  576:
         -:  577:static pthread_t storage_write_tid;
@@ -597,73 +597,73 @@
         -:  593:
        10:  594:    pthread_mutex_lock(&storage_write_plock);
         -:  595:
-   294568:  596:    while (1) {
+   296692:  596:    while (1) {
         -:  597:        // cache per-loop to avoid calls to the slabs_clsid() search loop
-    98196:  598:        int min_class = slabs_clsid(settings.ext_item_size);
-    98196:  599:        unsigned int global_pages = global_page_pool_size(NULL);
-    98196:  600:        bool do_sleep = true;
-    98196:  601:        int target_pages = 0;
-    98196:  602:        if (global_pages < settings.ext_global_pool_min) {
+    98904:  598:        int min_class = slabs_clsid(settings.ext_item_size);
+    98904:  599:        unsigned int global_pages = global_page_pool_size(NULL);
+    98904:  600:        bool do_sleep = true;
+    98904:  601:        int target_pages = 0;
+    98904:  602:        if (global_pages < settings.ext_global_pool_min) {
     #####:  603:            target_pages = settings.ext_global_pool_min - global_pages;
         -:  604:        }
-    98196:  605:        counter++;
-    98196:  606:        if (to_sleep > settings.ext_max_sleep)
+    98904:  605:        counter++;
+    98904:  606:        if (to_sleep > settings.ext_max_sleep)
         -:  607:            to_sleep = settings.ext_max_sleep;
         -:  608:
-  6382740:  609:        for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
-  6284544:  610:            bool did_move = false;
-  6284544:  611:            bool mem_limit_reached = false;
-  6284544:  612:            unsigned int chunks_free;
-  6284544:  613:            int item_age;
+  6428760:  609:        for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6329856:  610:            bool did_move = false;
+  6329856:  611:            bool mem_limit_reached = false;
+  6329856:  612:            unsigned int chunks_free;
+  6329856:  613:            int item_age;
         -:  614:
-  6284544:  615:            if (min_class > x || (backoff[x] && (counter % backoff[x] != 0))) {
-   901422:  616:                continue;
+  6329856:  615:            if (min_class > x || (backoff[x] && (counter % backoff[x] != 0))) {
+   908172:  616:                continue;
         -:  617:            }
         -:  618:
         -:  619:            // Avoid extra slab lock calls during heavy writing.
-  5383122:  620:            unsigned int chunks_perpage = 0;
-  5383122:  621:            chunks_free = slabs_available_chunks(x, &mem_limit_reached,
+  5421684:  620:            unsigned int chunks_perpage = 0;
+  5421684:  621:            chunks_free = slabs_available_chunks(x, &mem_limit_reached,
         -:  622:                    &chunks_perpage);
-  5383122:  623:            unsigned int target = chunks_perpage * target_pages;
+  5421684:  623:            unsigned int target = chunks_perpage * target_pages;
         -:  624:
         -:  625:            // storage_write() will fail and cut loop after filling write buffer.
-  5405690:  626:            while (1) {
+  5444252:  626:            while (1) {
         -:  627:                // if we are low on chunks and no spare, push out early.
-  5405690:  628:                if (chunks_free < target) {
+  5444252:  628:                if (chunks_free < target) {
         -:  629:                    item_age = 0;
         -:  630:                } else {
-  5405690:  631:                    item_age = settings.ext_item_age;
+  5444252:  631:                    item_age = settings.ext_item_age;
         -:  632:                }
-  5405690:  633:                if (storage_write(storage, x, item_age)) {
+  5444252:  633:                if (storage_write(storage, x, item_age)) {
     22568:  634:                    chunks_free++; // Allow stopping if we've done enough this loop
     22568:  635:                    did_move = true;
     22568:  636:                    do_sleep = false;
     22568:  637:                    if (to_sleep > WRITE_SLEEP_MIN)
-      230:  638:                        to_sleep /= 2;
+      231:  638:                        to_sleep /= 2;
         -:  639:                } else {
         -:  640:                    break;
         -:  641:                }
         -:  642:            }
         -:  643:
-  5383122:  644:            if (!did_move) {
-  5382502:  645:                backoff[x]++;
+  5421684:  644:            if (!did_move) {
+  5421050:  645:                backoff[x]++;
         -:  646:            } else {
-      620:  647:                backoff[x] = 1;
+      634:  647:                backoff[x] = 1;
         -:  648:            }
         -:  649:        }
         -:  650:
         -:  651:        // flip lock so we can be paused or stopped
-    98196:  652:        pthread_mutex_unlock(&storage_write_plock);
-    98196:  653:        if (do_sleep) {
+    98904:  652:        pthread_mutex_unlock(&storage_write_plock);
+    98904:  653:        if (do_sleep) {
         -:  654:            // Only do backoffs on other slab classes if we're actively
         -:  655:            // flushing at least one class.
-  6342440:  656:            for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
-  6244864:  657:                backoff[x] = 1;
+  6387550:  656:            for (int x = 0; x < MAX_NUMBER_OF_SLAB_CLASSES; x++) {
+  6289280:  657:                backoff[x] = 1;
         -:  658:            }
-    97576:  659:            usleep(to_sleep);
-    97566:  660:            to_sleep++;
+    98270:  659:            usleep(to_sleep);
+    98260:  660:            to_sleep++;
         -:  661:        }
-    98186:  662:        pthread_mutex_lock(&storage_write_plock);
+    98894:  662:        pthread_mutex_lock(&storage_write_plock);
         -:  663:    }
         -:  664:    return NULL;
         -:  665:}
@@ -713,61 +713,61 @@
         -:  709: * If we're more than half full, start skewing how aggressively to run
         -:  710: * compaction, up to a desired target when all pages are full.
         -:  711: */
-     1886:  712:static int storage_compact_check(void *storage, logger *l,
+     1895:  712:static int storage_compact_check(void *storage, logger *l,
         -:  713:        uint32_t *page_id, uint64_t *page_version,
         -:  714:        uint64_t *page_size, bool *drop_unread) {
-     1886:  715:    struct extstore_stats st;
-     1886:  716:    int x;
-     1886:  717:    double rate;
-     1886:  718:    uint64_t frag_limit;
-     1886:  719:    uint64_t low_version = ULLONG_MAX;
-     1886:  720:    uint64_t lowest_version = ULLONG_MAX;
-     1886:  721:    unsigned int low_page = 0;
-     1886:  722:    unsigned int lowest_page = 0;
-     1886:  723:    extstore_get_stats(storage, &st);
-     1886:  724:    if (st.pages_used == 0)
+     1895:  715:    struct extstore_stats st;
+     1895:  716:    int x;
+     1895:  717:    double rate;
+     1895:  718:    uint64_t frag_limit;
+     1895:  719:    uint64_t low_version = ULLONG_MAX;
+     1895:  720:    uint64_t lowest_version = ULLONG_MAX;
+     1895:  721:    unsigned int low_page = 0;
+     1895:  722:    unsigned int lowest_page = 0;
+     1895:  723:    extstore_get_stats(storage, &st);
+     1895:  724:    if (st.pages_used == 0)
         -:  725:        return 0;
         -:  726:
         -:  727:    // lets pick a target "wasted" value and slew.
-     1886:  728:    if (st.pages_free > settings.ext_compact_under)
+     1895:  728:    if (st.pages_free > settings.ext_compact_under)
         -:  729:        return 0;
-      638:  730:    *drop_unread = false;
+      629:  730:    *drop_unread = false;
         -:  731:
         -:  732:    // the number of free pages reduces the configured frag limit
         -:  733:    // this allows us to defrag early if pages are very empty.
-      638:  734:    rate = 1.0 - ((double)st.pages_free / st.page_count);
-      638:  735:    rate *= settings.ext_max_frag;
-      638:  736:    frag_limit = st.page_size * rate;
-     638*:  737:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_FRAGINFO,
+      629:  734:    rate = 1.0 - ((double)st.pages_free / st.page_count);
+      629:  735:    rate *= settings.ext_max_frag;
+      629:  736:    frag_limit = st.page_size * rate;
+     629*:  737:    LOGGER_LOG(l, LOG_SYSEVENTS, LOGGER_COMPACT_FRAGINFO,
         -:  738:            NULL, rate, frag_limit);
-      638:  739:    st.page_data = calloc(st.page_count, sizeof(struct extstore_page_data));
-      638:  740:    extstore_get_page_data(storage, &st);
+      629:  739:    st.page_data = calloc(st.page_count, sizeof(struct extstore_page_data));
+      629:  740:    extstore_get_page_data(storage, &st);
         -:  741:
         -:  742:    // find oldest page by version that violates the constraint
-     6481:  743:    for (x = 0; x < st.page_count; x++) {
-     5205:  744:        if (st.page_data[x].version == 0 ||
-     1097:  745:            st.page_data[x].bucket == PAGE_BUCKET_LOWTTL)
-     4120:  746:            continue;
-     1085:  747:        if (st.page_data[x].version < lowest_version) {
-      700:  748:            lowest_page = x;
-      700:  749:            lowest_version = st.page_data[x].version;
+     6398:  743:    for (x = 0; x < st.page_count; x++) {
+     5140:  744:        if (st.page_data[x].version == 0 ||
+     1085:  745:            st.page_data[x].bucket == PAGE_BUCKET_LOWTTL)
+     4067:  746:            continue;
+     1073:  747:        if (st.page_data[x].version < lowest_version) {
+      692:  748:            lowest_page = x;
+      692:  749:            lowest_version = st.page_data[x].version;
         -:  750:        }
-     1085:  751:        if (st.page_data[x].bytes_used < frag_limit) {
+     1073:  751:        if (st.page_data[x].bytes_used < frag_limit) {
       104:  752:            if (st.page_data[x].version < low_version) {
        16:  753:                low_page = x;
        16:  754:                low_version = st.page_data[x].version;
         -:  755:            }
         -:  756:        }
         -:  757:    }
-      638:  758:    *page_size = st.page_size;
-      638:  759:    free(st.page_data);
+      629:  758:    *page_size = st.page_size;
+      629:  759:    free(st.page_data);
         -:  760:
         -:  761:    // we have a page + version to attempt to reclaim.
-      638:  762:    if (low_version != ULLONG_MAX) {
+      629:  762:    if (low_version != ULLONG_MAX) {
        13:  763:        *page_id = low_page;
        13:  764:        *page_version = low_version;
        13:  765:        return 1;
-      625:  766:    } else if (lowest_version != ULLONG_MAX && settings.ext_drop_unread
+      616:  766:    } else if (lowest_version != ULLONG_MAX && settings.ext_drop_unread
       417:  767:            && st.pages_free <= settings.ext_drop_under) {
         -:  768:        // nothing matched the frag rate barrier, so pick the absolute oldest
         -:  769:        // version if we're configured to drop items.
@@ -964,15 +964,15 @@
        10:  960:    wrap.io.cb = _storage_compact_cb;
        10:  961:    pthread_mutex_lock(&storage_compact_plock);
         -:  962:
-     2025:  963:    while (1) {
-     2025:  964:        pthread_mutex_unlock(&storage_compact_plock);
-     2025:  965:        if (to_sleep) {
-     2025:  966:            extstore_run_maint(storage);
-     2025:  967:            usleep(to_sleep);
+     2034:  963:    while (1) {
+     2034:  964:        pthread_mutex_unlock(&storage_compact_plock);
+     2034:  965:        if (to_sleep) {
+     2034:  966:            extstore_run_maint(storage);
+     2034:  967:            usleep(to_sleep);
         -:  968:        }
-     2015:  969:        pthread_mutex_lock(&storage_compact_plock);
+     2024:  969:        pthread_mutex_lock(&storage_compact_plock);
         -:  970:
-     2015:  971:        if (!compacting && storage_compact_check(storage, l,
+     2024:  971:        if (!compacting && storage_compact_check(storage, l,
         -:  972:                    &page_id, &page_version, &page_size, &drop_unread)) {
        18:  973:            page_offset = 0;
        18:  974:            compacting = true;
@@ -980,7 +980,7 @@
         -:  976:                    NULL, page_id, page_version);
         -:  977:        }
         -:  978:
-    1997*:  979:        if (compacting) {
+    2006*:  979:        if (compacting) {
       147:  980:            pthread_mutex_lock(&wrap.lock);
       147:  981:            if (page_offset < page_size && !wrap.done && !wrap.submitted) {
        66:  982:                wrap.io.page_version = page_version;
@@ -1020,7 +1020,7 @@
         -: 1016:            // finish actual compaction quickly.
       147: 1017:            to_sleep = MIN_STORAGE_COMPACT_SLEEP;
         -: 1018:        } else {
-     1868: 1019:            if (to_sleep < settings.ext_max_sleep)
+     1877: 1019:            if (to_sleep < settings.ext_max_sleep)
         5: 1020:                to_sleep += settings.ext_max_sleep;
         -: 1021:        }
         -: 1022:    }

@@ -716,23 +716,23 @@
         -:  712:/* Reads a particular worker thread's available bipbuf bytes. Parses each log
         -:  713: * entry into the watcher buffers.
         -:  714: */
-    24990:  715:static int logger_thread_read(logger *l, struct logger_stats *ls) {
-    24990:  716:    unsigned int size;
-    24990:  717:    unsigned int pos = 0;
-    24990:  718:    unsigned char *data;
-    24990:  719:    char scratch[LOGGER_PARSE_SCRATCH];
-    24990:  720:    logentry *e;
-    24990:  721:    pthread_mutex_lock(&l->mutex);
-    24990:  722:    data = bipbuf_peek_all(l->buf, &size);
-    24990:  723:    pthread_mutex_unlock(&l->mutex);
+    24315:  715:static int logger_thread_read(logger *l, struct logger_stats *ls) {
+    24315:  716:    unsigned int size;
+    24315:  717:    unsigned int pos = 0;
+    24315:  718:    unsigned char *data;
+    24315:  719:    char scratch[LOGGER_PARSE_SCRATCH];
+    24315:  720:    logentry *e;
+    24315:  721:    pthread_mutex_lock(&l->mutex);
+    24315:  722:    data = bipbuf_peek_all(l->buf, &size);
+    24315:  723:    pthread_mutex_unlock(&l->mutex);
         -:  724:
-    24990:  725:    if (data == NULL) {
+    24315:  725:    if (data == NULL) {
         -:  726:        return 0;
         -:  727:    }
         -:  728:    L_DEBUG("LOGGER: Got %d bytes from bipbuffer\n", size);
         -:  729:
         -:  730:    /* parse buffer */
-    85339:  731:    while (pos < size && watcher_count > 0) {
+    85212:  731:    while (pos < size && watcher_count > 0) {
     81116:  732:        enum logger_parse_entry_ret ret;
     81116:  733:        int scratch_len = 0;
     81116:  734:        e = (logentry *) (data + pos);
@@ -745,20 +745,20 @@
         -:  741:        }
     81116:  742:        pos += sizeof(logentry) + e->size + e->pad;
         -:  743:    }
-    4223*:  744:    assert(pos <= size);
+    4096*:  744:    assert(pos <= size);
         -:  745:
-     4223:  746:    pthread_mutex_lock(&l->mutex);
-     4223:  747:    data = bipbuf_poll(l->buf, size);
-     4223:  748:    ls->worker_written += l->written;
-     4223:  749:    ls->worker_dropped += l->dropped;
-     4223:  750:    l->written = 0;
-     4223:  751:    l->dropped = 0;
-     4223:  752:    pthread_mutex_unlock(&l->mutex);
-     4223:  753:    if (data == NULL) {
+     4096:  746:    pthread_mutex_lock(&l->mutex);
+     4096:  747:    data = bipbuf_poll(l->buf, size);
+     4096:  748:    ls->worker_written += l->written;
+     4096:  749:    ls->worker_dropped += l->dropped;
+     4096:  750:    l->written = 0;
+     4096:  751:    l->dropped = 0;
+     4096:  752:    pthread_mutex_unlock(&l->mutex);
+     4096:  753:    if (data == NULL) {
     #####:  754:        fprintf(stderr, "LOGGER: unexpectedly couldn't advance buf pointer\n");
     #####:  755:        assert(0);
         -:  756:    }
-     4223:  757:    return size; /* maybe the count of objects iterated? */
+     4096:  757:    return size; /* maybe the count of objects iterated? */
         -:  758:}
         -:  759:
         -:  760:/* Since the event loop code isn't reusable without a refactor, and we have a
@@ -772,23 +772,23 @@
         -:  768: *
         -:  769: * Allows a specific watcher to be flushed (if buf full)
         -:  770: */
-     9211:  771:static int logger_thread_poll_watchers(int force_poll, int watcher) {
-     9211:  772:    int x;
-     9211:  773:    int nfd = 0;
-     9211:  774:    unsigned char *data;
-     9211:  775:    unsigned int data_size = 0;
-     9211:  776:    int flushed = 0;
+     8949:  771:static int logger_thread_poll_watchers(int force_poll, int watcher) {
+     8949:  772:    int x;
+     8949:  773:    int nfd = 0;
+     8949:  774:    unsigned char *data;
+     8949:  775:    unsigned int data_size = 0;
+     8949:  776:    int flushed = 0;
         -:  777:
-   193431:  778:    for (x = 0; x < WATCHER_LIMIT; x++) {
-   184220:  779:        logger_watcher *w = watchers[x];
-   184220:  780:        if (w == NULL || (watcher != WATCHER_ALL && x != watcher))
-   174972:  781:            continue;
+   187929:  778:    for (x = 0; x < WATCHER_LIMIT; x++) {
+   178980:  779:        logger_watcher *w = watchers[x];
+   178980:  780:        if (w == NULL || (watcher != WATCHER_ALL && x != watcher))
+   169994:  781:            continue;
         -:  782:
-     9248:  783:        data = bipbuf_peek_all(w->buf, &data_size);
-     9248:  784:        if (data != NULL) {
-     9143:  785:            watchers_pollfds[nfd].fd = w->sfd;
-     9143:  786:            watchers_pollfds[nfd].events = POLLOUT;
-     9143:  787:            nfd++;
+     8986:  783:        data = bipbuf_peek_all(w->buf, &data_size);
+     8986:  784:        if (data != NULL) {
+     8881:  785:            watchers_pollfds[nfd].fd = w->sfd;
+     8881:  786:            watchers_pollfds[nfd].events = POLLOUT;
+     8881:  787:            nfd++;
       105:  788:        } else if (force_poll) {
       105:  789:            watchers_pollfds[nfd].fd = w->sfd;
       105:  790:            watchers_pollfds[nfd].events = POLLIN;
@@ -797,31 +797,31 @@
         -:  793:        /* This gets set after a call to poll, and should be used to gate on
         -:  794:         * calling poll again.
         -:  795:         */
-     9248:  796:        w->failed_flush = false;
+     8986:  796:        w->failed_flush = false;
         -:  797:    }
         -:  798:
-     9211:  799:    if (nfd == 0)
+     8949:  799:    if (nfd == 0)
         -:  800:        return 0;
         -:  801:
         -:  802:    //L_DEBUG("LOGGER: calling poll() [data_size: %d]\n", data_size);
-     9209:  803:    int ret = poll(watchers_pollfds, nfd, 0);
+     8947:  803:    int ret = poll(watchers_pollfds, nfd, 0);
         -:  804:
-     9209:  805:    if (ret < 0) {
+     8947:  805:    if (ret < 0) {
     #####:  806:        perror("something failed with logger thread watcher fd polling");
     #####:  807:        return -1;
         -:  808:    }
         -:  809:
         -:  810:    nfd = 0;
-   193389:  811:    for (x = 0; x < WATCHER_LIMIT; x++) {
-   184180:  812:        logger_watcher *w = watchers[x];
-   184180:  813:        if (w == NULL || (watcher != WATCHER_ALL && x != watcher))
-   174932:  814:            continue;
+   187887:  811:    for (x = 0; x < WATCHER_LIMIT; x++) {
+   178940:  812:        logger_watcher *w = watchers[x];
+   178940:  813:        if (w == NULL || (watcher != WATCHER_ALL && x != watcher))
+   169954:  814:            continue;
         -:  815:
-     9248:  816:        data_size = 0;
+     8986:  816:        data_size = 0;
         -:  817:        /* Early detection of a disconnect. Otherwise we have to wait until
         -:  818:         * the next write
         -:  819:         */
-     9248:  820:        if (watchers_pollfds[nfd].revents & POLLIN) {
+     8986:  820:        if (watchers_pollfds[nfd].revents & POLLIN) {
         9:  821:            char buf[1];
         9:  822:            int res = ((conn*)w->c)->read(w->c, buf, 1);
         9:  823:            if (res == 0 || (res == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))) {
@@ -831,11 +831,11 @@
         9:  827:                continue;
         -:  828:            }
         -:  829:        }
-     9239:  830:        if ((data = bipbuf_peek_all(w->buf, &data_size)) != NULL) {
-     9143:  831:            if (watchers_pollfds[nfd].revents & (POLLHUP|POLLERR)) {
+     8977:  830:        if ((data = bipbuf_peek_all(w->buf, &data_size)) != NULL) {
+     8881:  831:            if (watchers_pollfds[nfd].revents & (POLLHUP|POLLERR)) {
         2:  832:                L_DEBUG("LOGGER: watcher closed during poll() call\n");
         2:  833:                logger_thread_close_watcher(w);
-     9141:  834:            } else if (watchers_pollfds[nfd].revents & POLLOUT) {
+     8879:  834:            } else if (watchers_pollfds[nfd].revents & POLLOUT) {
        46:  835:                int total = 0;
         -:  836:
         -:  837:                /* We can write a bit. */
@@ -863,20 +863,20 @@
         -:  859:                }
         -:  860:            }
         -:  861:        }
-     9239:  862:        nfd++;
+     8977:  862:        nfd++;
         -:  863:    }
         -:  864:    return flushed;
         -:  865:}
         -:  866:
-     4998:  867:static void logger_thread_flush_stats(struct logger_stats *ls) {
-     4998:  868:    STATS_LOCK();
-     4998:  869:    stats.log_worker_dropped  += ls->worker_dropped;
-     4998:  870:    stats.log_worker_written  += ls->worker_written;
-     4998:  871:    stats.log_watcher_skipped += ls->watcher_skipped;
-     4998:  872:    stats.log_watcher_sent    += ls->watcher_sent;
-     4998:  873:    stats_state.log_watchers   = ls->watcher_count;
-     4998:  874:    STATS_UNLOCK();
-     4998:  875:}
+     4863:  867:static void logger_thread_flush_stats(struct logger_stats *ls) {
+     4863:  868:    STATS_LOCK();
+     4863:  869:    stats.log_worker_dropped  += ls->worker_dropped;
+     4863:  870:    stats.log_worker_written  += ls->worker_written;
+     4863:  871:    stats.log_watcher_skipped += ls->watcher_skipped;
+     4863:  872:    stats.log_watcher_sent    += ls->watcher_sent;
+     4863:  873:    stats_state.log_watchers   = ls->watcher_count;
+     4863:  874:    STATS_UNLOCK();
+     4863:  875:}
         -:  876:
         -:  877:#define MAX_LOGGER_SLEEP 1000000
         -:  878:#define MIN_LOGGER_SLEEP 1000
@@ -887,47 +887,47 @@
       120:  883:    L_DEBUG("LOGGER: Starting logger thread\n");
         -:  884:    // TODO: If we ever have item references in the logger code, will need to
         -:  885:    // ensure everything is dequeued before stopping the thread.
-     5118:  886:    while (do_run_logger_thread) {
-     5116:  887:        int found_logs = 0;
-     5116:  888:        logger *l;
-     5116:  889:        struct logger_stats ls;
-     5116:  890:        memset(&ls, 0, sizeof(struct logger_stats));
+     4983:  886:    while (do_run_logger_thread) {
+     4981:  887:        int found_logs = 0;
+     4981:  888:        logger *l;
+     4981:  889:        struct logger_stats ls;
+     4981:  890:        memset(&ls, 0, sizeof(struct logger_stats));
         -:  891:
         -:  892:        /* only sleep if we're *above* the minimum */
-     5116:  893:        if (to_sleep > MIN_LOGGER_SLEEP)
-      782:  894:            usleep(to_sleep);
+     4981:  893:        if (to_sleep > MIN_LOGGER_SLEEP)
+      774:  894:            usleep(to_sleep);
         -:  895:
         -:  896:        /* Call function to iterate each logger. */
-     5116:  897:        pthread_mutex_lock(&logger_stack_lock);
-     5116:  898:        if (watcher_count == 0) {
+     4981:  897:        pthread_mutex_lock(&logger_stack_lock);
+     4981:  898:        if (watcher_count == 0) {
         -:  899:            // Not bothering to loop on the condition here since it's fine to
         -:  900:            // walk through with zero watchers.
       125:  901:            pthread_cond_wait(&logger_stack_cond, &logger_stack_lock);
         -:  902:        }
-    29988:  903:        for (l = logger_stack_head; l != NULL; l=l->next) {
+    29178:  903:        for (l = logger_stack_head; l != NULL; l=l->next) {
         -:  904:            /* lock logger, call function to manipulate it */
-    24990:  905:            found_logs += logger_thread_read(l, &ls);
+    24315:  905:            found_logs += logger_thread_read(l, &ls);
         -:  906:        }
         -:  907:
-     4998:  908:        logger_thread_poll_watchers(1, WATCHER_ALL);
+     4863:  908:        logger_thread_poll_watchers(1, WATCHER_ALL);
         -:  909:
         -:  910:        /* capture the current count within mutual exclusion of the lock */
-     4998:  911:        ls.watcher_count = watcher_count;
+     4863:  911:        ls.watcher_count = watcher_count;
         -:  912:
-     4998:  913:        pthread_mutex_unlock(&logger_stack_lock);
+     4863:  913:        pthread_mutex_unlock(&logger_stack_lock);
         -:  914:
         -:  915:        /* TODO: abstract into a function and share with lru_crawler */
-     4998:  916:        if (!found_logs) {
-      775:  917:            if (to_sleep < MAX_LOGGER_SLEEP)
-      775:  918:                to_sleep += to_sleep / 8;
-      775:  919:            if (to_sleep > MAX_LOGGER_SLEEP)
+     4863:  916:        if (!found_logs) {
+      767:  917:            if (to_sleep < MAX_LOGGER_SLEEP)
+      767:  918:                to_sleep += to_sleep / 8;
+      767:  919:            if (to_sleep > MAX_LOGGER_SLEEP)
         -:  920:                to_sleep = MAX_LOGGER_SLEEP;
         -:  921:        } else {
-     4223:  922:            to_sleep /= 2;
-     4223:  923:            if (to_sleep < MIN_LOGGER_SLEEP)
-     4214:  924:                to_sleep = MIN_LOGGER_SLEEP;
+     4096:  922:            to_sleep /= 2;
+     4096:  923:            if (to_sleep < MIN_LOGGER_SLEEP)
+     4087:  924:                to_sleep = MIN_LOGGER_SLEEP;
         -:  925:        }
-     4998:  926:        logger_thread_flush_stats(&ls);
+     4863:  926:        logger_thread_flush_stats(&ls);
         -:  927:    }
         -:  928:
         2:  929:    return NULL;

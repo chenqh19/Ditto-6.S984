@@ -109,7 +109,7 @@ for (conns, reqs, duration) in exp_config_list:
   os.makedirs(os.path.join(output_dir, f'conns_{conns}_reqs_{reqs}_duration_{duration}'), exist_ok=True)
 
   logging.info(f'conns = {conns}, reqs = {reqs}, duration = {duration}')
-  stap_cmd = f'echo {root_passwd} | sudo -S stap -vg threads.stp -x {args.pid} ' \
+  stap_cmd = f'echo {root_passwd} | sudo -S /opt/stap/bin/stap -vg threads.stp -x {args.pid} ' \
       '-D MAXACTION=1000000 -D MAXMAPENTRIES=1000000 -B CONFIG_MODVERSIONS=y > tmp_stap.json'
   logger.debug(stap_cmd.replace(root_passwd, "root_passwd"))
   logger.info('Systemstap start running.')
