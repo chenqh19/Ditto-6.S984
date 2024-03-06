@@ -3,3 +3,5 @@ logs
 *.pyc
 __pycache__
 *.pkl
+*.data
+*.data.old

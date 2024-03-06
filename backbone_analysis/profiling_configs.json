@@ -1,6 +1,6 @@
 {
   "memcached": {
-    "app_cmd": "~/Ditto-6.S984/applications/memcached-1.6.9/build/memcached -p 11212 -t 4",
+    "app_cmd": "~/Ditto-6.S984/applications/memcached-1.6.24/memcached -p 11212 -t 4",
     "load_cmd": "~/Ditto-6.S984/client/mutated/client/load_memcache 0.0.0.0:11212",
     "client_cmd": "~/Ditto-6.S984/client/mutated/client/mutated_memcache 0.0.0.0:11212 -n <conns> -w 0 -c 0 -s <duration> <reqs_per_sec>",
     "conns_list": [10, 20, 30],
