@@ -17,6 +17,13 @@ make
 sudo apt install htop
 sudo apt install linux-tools-common
 yes | sudo apt install linux-tools-5.4.0-164-generic
+yes | sudo apt install python3 pip
+yes | sudo apt install cmake
+pip install jsoncomment
+pip install -U scikit-learn scipy matplotlib
+pip install wheel
+pip install pandas
+pip install disjoint-set
 
 ### install systap
 cd ~/Ditto-6.S984/systemtap-4.4
