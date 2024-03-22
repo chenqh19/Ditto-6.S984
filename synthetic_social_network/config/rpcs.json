@@ -1,0 +1,65 @@
+{
+  "rpc_0": {
+    "server": "service_0"
+  },
+  "rpc_1": {
+    "server": "service_1"
+  },
+  "rpc_2": {
+    "server": "service_2"
+  },
+  "rpc_3": {
+    "server": "service_3"
+  },
+  "rpc_4": {
+    "server": "service_4"
+  },
+  "rpc_5": {
+    "server": "service_5"
+  },
+  "rpc_6": {
+    "server": "service_6"
+  },
+  "rpc_7": {
+    "server": "service_7"
+  },
+  "rpc_8": {
+    "server": "service_8"
+  },
+  "rpc_9": {
+    "server": "service_9"
+  },
+  "rpc_10": {
+    "server": "service_10"
+  },
+  "rpc_11": {
+    "server": "service_11"
+  },
+  "rpc_12": {
+    "server": "service_12"
+  },
+  "rpc_13": {
+    "server": "service_13"
+  },
+  "rpc_14": {
+    "server": "service_14"
+  },
+  "rpc_15": {
+    "server": "service_15"
+  },
+  "rpc_16": {
+    "server": "service_16"
+  },
+  "rpc_17": {
+    "server": "service_17"
+  },
+  "rpc_18": {
+    "server": "service_18"
+  },
+  "rpc_19": {
+    "server": "service_19"
+  },
+  "rpc_20": {
+    "server": "service_20"
+  }
+}

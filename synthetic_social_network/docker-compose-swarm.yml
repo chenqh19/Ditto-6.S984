@@ -1,0 +1,303 @@
+version: "3.8"
+services:
+  nginx-web-server:
+    image: ml2585/openresty-thrift:bionic
+    hostname: nginx-web-server
+    ports:
+      - 8010:8080
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - ./nginx-web-server/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+      - ./nginx-web-server/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./nginx-web-server/jaeger-config.json:/usr/local/openresty/nginx/jaeger-config.json
+      - ./gen-lua:/gen-lua
+      
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    hostname: jaeger
+    ports:
+      - 16610:16686
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    restart: always
+
+  service_9:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_9
+    restart: always
+    # init: true
+    entrypoint: service_9
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_20:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_20
+    restart: always
+    # init: true
+    entrypoint: service_20
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_5:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_5
+    restart: always
+    # init: true
+    entrypoint: service_5 -n 4
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_4:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_4
+    restart: always
+    # init: true
+    entrypoint: service_4
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_7:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_7
+    restart: always
+    # init: true
+    entrypoint: service_7
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_1:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_1
+    restart: always
+    # init: true
+    entrypoint: service_1
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_0:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_0
+    restart: always
+    # init: true
+    entrypoint: service_0
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_3:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_3
+    restart: always
+    # init: true
+    entrypoint: service_3
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_2:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_2
+    restart: always
+    # init: true
+    entrypoint: service_2
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_15:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_15
+    restart: always
+    # init: true
+    entrypoint: service_15
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_14:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_14
+    restart: always
+    # init: true
+    entrypoint: service_14
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_17:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_17
+    restart: always
+    # init: true
+    entrypoint: service_17
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == data
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_16:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_16
+    restart: always
+    # init: true
+    entrypoint: service_16
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_11:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_11
+    restart: always
+    # init: true
+    entrypoint: service_11
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_10:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_10
+    restart: always
+    # init: true
+    entrypoint: service_10
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_13:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_13
+    restart: always
+    # init: true
+    entrypoint: service_13
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_12:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_12
+    restart: always
+    # init: true
+    entrypoint: service_12
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+
+  service_18:
+    image: ml2585/synthetic_social_network:tcp
+    hostname: service_18
+    restart: always
+    # init: true
+    entrypoint: service_18
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.type == front
+    volumes:
+      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+

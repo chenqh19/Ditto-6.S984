@@ -1,0 +1,21 @@
+version: "3"
+services:
+  nginx-web-server:
+    image: ml2585/openresty-thrift:bionic
+    hostname: nginx-web-server
+    ports:
+      - 8010:8080
+    restart: always
+    volumes:
+      - ./nginx-web-server/lua-scripts:/usr/local/openresty/nginx/lua-scripts
+      - ./nginx-web-server/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./nginx-web-server/jaeger-config.json:/usr/local/openresty/nginx/jaeger-config.json
+      - ./gen-lua:/gen-lua
+      
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    hostname: jaeger
+    ports:
+      - 16610:16686
+    restart: always
+
