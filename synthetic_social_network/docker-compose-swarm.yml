@@ -44,7 +44,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_20:
     image: ml2585/synthetic_social_network:tcp
@@ -59,7 +59,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_5:
     image: ml2585/synthetic_social_network:tcp
@@ -74,7 +74,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_4:
     image: ml2585/synthetic_social_network:tcp
@@ -89,7 +89,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_7:
     image: ml2585/synthetic_social_network:tcp
@@ -104,7 +104,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_1:
     image: ml2585/synthetic_social_network:tcp
@@ -119,7 +119,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_0:
     image: ml2585/synthetic_social_network:tcp
@@ -134,7 +134,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_3:
     image: ml2585/synthetic_social_network:tcp
@@ -149,7 +149,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_2:
     image: ml2585/synthetic_social_network:tcp
@@ -164,7 +164,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_15:
     image: ml2585/synthetic_social_network:tcp
@@ -179,7 +179,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_14:
     image: ml2585/synthetic_social_network:tcp
@@ -194,7 +194,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_17:
     image: ml2585/synthetic_social_network:tcp
@@ -209,7 +209,7 @@ services:
         constraints:
           - node.labels.type == data
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_16:
     image: ml2585/synthetic_social_network:tcp
@@ -224,7 +224,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_11:
     image: ml2585/synthetic_social_network:tcp
@@ -239,7 +239,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_10:
     image: ml2585/synthetic_social_network:tcp
@@ -254,7 +254,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_13:
     image: ml2585/synthetic_social_network:tcp
@@ -269,7 +269,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_12:
     image: ml2585/synthetic_social_network:tcp
@@ -284,7 +284,7 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_18:
     image: ml2585/synthetic_social_network:tcp
@@ -299,5 +299,5 @@ services:
         constraints:
           - node.labels.type == front
     volumes:
-      - /filer-01/ml2585/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 

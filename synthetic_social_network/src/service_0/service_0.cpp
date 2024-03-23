@@ -29,6 +29,9 @@
 #include <time.h>
 #include <yaml-cpp/yaml.h>
 
+#include <cstring> // For strerror
+#include <cerrno> // For errno
+
 #include "../ClientPool.h"
 #include "../MemcachedTCPClient.h"
 #include "../MongoTCPClient.h"
@@ -444,7 +447,7 @@ int main(int argc, char *argv[]) {
     json_file >> services_json;
     json_file.close();
   } else {
-    cout << "Cannot open services-config.json" << endl;
+    cout << "Cannot open services-config.json " << strerror(errno) << endl;
     return -1;
   }
 
