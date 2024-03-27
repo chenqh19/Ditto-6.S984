@@ -36,3 +36,7 @@ pip install gurobipy
 pip install gevent
 pip install scipy
 pip install paramiko
+
+cd wrk2
+make
+cd ..
