@@ -111,7 +111,7 @@ def main(argv):
     f.close()
     os.system('cog @cog.txt')
     for service in services:
-      os.system('clang-format-3.9 -i ../src/' + service + '/' + service + '.cpp -style={"IndentWidth: 2"}')
+      os.system('clang-format -i ../src/' + service + '/' + service + '.cpp -style={"IndentWidth: 2"}')
     os.system('rm cog.txt')
     for service in services:
       with open("../src/" + service + "/utils.h", "w") as utils_f:

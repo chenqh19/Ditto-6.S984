@@ -3,7 +3,7 @@ import os
 import sys
 
 image_name = "ml2585/synthetic_social_network:tcp"
-config = "/users/chenqh23/Ditto-6.S984/synthetic_social_network/synthetic_social_network/config/"
+config = "/users/chenqh23/Ditto-6.S984/synthetic_social_network/config/"
 
 def main(argv):
   path_id = argv[0]
