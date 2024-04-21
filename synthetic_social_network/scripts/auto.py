@@ -2,8 +2,8 @@ import json
 import os
 import sys
 
-image_name = "yg397/synthetic_social_network:tcp"
-config = "/filer-01/yg397/Ditto/applications/synthetic_social_network/config/"
+image_name = "ml2585/synthetic_social_network:tcp"
+config = "/users/chenqh23/Ditto-6.S984/synthetic_social_network/synthetic_social_network/config/"
 
 def main(argv):
   path_id = argv[0]

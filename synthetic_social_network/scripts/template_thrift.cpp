@@ -39,7 +39,7 @@
 #include "../MemcachedTCPClient.h"
 #include "utils.h"
 
-/*[[[cog
+[[[cog
 import cog
 import json
 import math
@@ -96,8 +96,8 @@ with open(config + "services.json",'r') as load_services_f:
       cog.outl('#include "../../gen-cpp/' + service + '.h"')
   cog.outl('#include "../../gen-cpp/' + serviceName + '.h"')
 
-]]]*/
-//[[[end]]]
+]]]
+[[[end]]]
 
 using namespace std;
 using namespace apache::thrift;
@@ -115,7 +115,7 @@ using namespace auto_microservices;
 static uint64_t _request_id = 0;
 static uint64_t* pointer_chasing_mem_data = new uint64_t[4*1024*1024 / 8];
 
-/*[[[cog
+[[[cog
 import cog
 
 rpcs_receive = services_json[serviceName]['rpcs_receive']
@@ -352,10 +352,10 @@ for rpc_receive in rpcs_receive:
 
 cog.outl('};')
 
-]]]*/
-//[[[end]]]
+]]]
+[[[end]]]
 
-/*[[[cog
+[[[cog
 import cog
 
 cog.outl('class ' + serviceName + 'CloneFactory: public ' + serviceName + 'IfFactory {')
@@ -417,15 +417,15 @@ cog.outl('}')
 
 cog.outl('};')
 
-    ]]]*/
-//[[[end]]]
+    ]]]
+[[[end]]]
 
 void startServer(TServer &server) {
-  /*[[[cog
+  [[[cog
       import cog
       cog.outl('cout << "Starting the '+ serviceName + ' server..." << endl;')
-      ]]]*/
-  //[[[end]]]
+      ]]]
+  [[[end]]]
   server.serve();
   cout << "Done." << endl;
 }
@@ -460,7 +460,7 @@ int main(int argc, char *argv[]) {
       begin = end;
   }
 
-  /*[[[cog
+  [[[cog
   import cog
   cog.outl('srand((unsigned)time(NULL));')
   cog.outl('SetUpTracer("config/jaeger-config.yml", "' + serviceName + '");')
@@ -548,7 +548,7 @@ int main(int argc, char *argv[]) {
     cog.outl('stdcxx::make_shared<TBufferedTransportFactory>(),')
     cog.outl('stdcxx::make_shared<TBinaryProtocolFactory>());')
 
-  ]]]*/
+  ]]]
   //[[[end]]]
   startServer(server);
 }
