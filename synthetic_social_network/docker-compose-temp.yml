@@ -20,164 +20,164 @@ services:
     restart: always
 
   service_9:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_9
     restart: always
     init: true
     entrypoint: service_9
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_20:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_20
     restart: always
     init: true
     entrypoint: service_20
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_5:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_5
     restart: always
     init: true
     entrypoint: service_5
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_4:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_4
     restart: always
     init: true
     entrypoint: service_4
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_7:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_7
     restart: always
     init: true
     entrypoint: service_7
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_1:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_1
     restart: always
     init: true
     entrypoint: service_1
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_0:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_0
     restart: always
     init: true
     entrypoint: service_0
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_3:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_3
     restart: always
     init: true
     entrypoint: service_3
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_2:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_2
     restart: always
     init: true
     entrypoint: service_2
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_15:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_15
     restart: always
     init: true
     entrypoint: service_15
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_14:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_14
     restart: always
     init: true
     entrypoint: service_14
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_17:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_17
     restart: always
     init: true
     entrypoint: service_17
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_16:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_16
     restart: always
     init: true
     entrypoint: service_16
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_11:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_11
     restart: always
     init: true
     entrypoint: service_11
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_10:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_10
     restart: always
     init: true
     entrypoint: service_10
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_13:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_13
     restart: always
     init: true
     entrypoint: service_13
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_12:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_12
     restart: always
     init: true
     entrypoint: service_12
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_18:
-    image: yg397/synthetic_social_network:tcp
+    image: ml2585/synthetic_social_network:tcp
     hostname: service_18
     restart: always
     init: true
     entrypoint: service_18
     volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
+      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
