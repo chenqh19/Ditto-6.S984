@@ -13,11 +13,11 @@ def main(argv):
   #     if os.path.exists("../src/" + service):
   #       os.system('rm -rf ../src/' + service)
   # os.system('docker rmi ' + image_name)
-  os.system('rm -rf ../gen-cpp')
-  os.system('rm -rf ../gen-lua')
+  # os.system('rm -rf ../gen-cpp')
+  # os.system('rm -rf ../gen-lua')
 
-  os.system('python2 thrift_gen.py ' + config)
-  os.system('python2 lua_rewrite.py')
+  # os.system('python2 thrift_gen.py ' + config)
+  # os.system('python2 lua_rewrite.py')
   # os.system('python2 src_files_gen.py ' + path_id + ' ' + config)
   os.system('python2 docker-compose_gen.py ' + path_id + ' ' + image_name + ' ' + config)
 

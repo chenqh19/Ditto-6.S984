@@ -40,7 +40,8 @@
 #include "utils.h"
 
 #include "../../gen-cpp/service_1.h"
-#include "../../gen-cpp/service_2.h"
+// #include "../../gen-cpp/service_2.h"
+#include "../../gen-cpp/service_3.h"
 #include "../../gen-cpp/service_4.h"
 
 using namespace std;
@@ -61,7 +62,8 @@ static uint64_t *pointer_chasing_mem_data = new uint64_t[256 * 1024 * 1024 / 8];
 
 class service_1Handler : public service_1If {
 private:
-  ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  // ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  TCPClientPool<MongoTCPClient> *_service_3_client_pool;
   ClientPool<ThriftClient<service_4Client>> *_service_4_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
@@ -70,10 +72,12 @@ private:
 
 public:
   explicit service_1Handler(
-      ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      // ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      TCPClientPool<MongoTCPClient> *service_3_client_pool,
       ClientPool<ThriftClient<service_4Client>> *service_4_client_pool,
       uint64_t *pointer_chasing_mem_data) {
-    _service_2_client_pool = service_2_client_pool;
+    // _service_2_client_pool = service_2_client_pool;
+    _service_3_client_pool = service_3_client_pool;
     _service_4_client_pool = service_4_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[23];
@@ -153,30 +157,61 @@ public:
           i.wait();
         }
       }
-      std::map<std::string, std::string> writer_text_map_2;
-      TextMapWriter writer_2(writer_text_map_2);
+      // std::map<std::string, std::string> writer_text_map_2;
+      // TextMapWriter writer_2(writer_text_map_2);
 
-      auto self_span_2 = opentracing::Tracer::Global()->StartSpan(
-          "rpc_2_client", {opentracing::ChildOf(&(span->context()))});
-      opentracing::Tracer::Global()->Inject(self_span_2->context(), writer_2);
-      auto service_2_client_wrapper_2 = _service_2_client_pool->Pop();
-      if (!service_2_client_wrapper_2) {
-        LOG(error) << "ERROR: Failed to connect to service_2";
+      // auto self_span_2 = opentracing::Tracer::Global()->StartSpan(
+      //     "rpc_2_client", {opentracing::ChildOf(&(span->context()))});
+      // opentracing::Tracer::Global()->Inject(self_span_2->context(), writer_2);
+      // auto service_2_client_wrapper_2 = _service_2_client_pool->Pop();
+      // if (!service_2_client_wrapper_2) {
+      //   LOG(error) << "ERROR: Failed to connect to service_2";
+      //   ServiceException se;
+      //   se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+      //   se.message = "Failed to connect to service_2";
+      //   throw se;
+      // } else {
+      //   auto service_2_client = service_2_client_wrapper_2->GetClient();
+      //   try {
+      //     service_2_client->rpc_2(writer_text_map_2);
+      //     _service_2_client_pool->Keepalive(service_2_client_wrapper_2);
+      //   } catch (...) {
+      //     LOG(error) << "ERROR: Failed to send rpc.";
+      //     _service_2_client_pool->Remove(service_2_client_wrapper_2);
+      //   }
+      // }
+      // self_span_2->Finish();
+
+      try {
+        runAssembly1(_mem_data, _request_id, _curr_mem_addrs,
+                    _curr_pointer_chasing_mem_addrs);
+      } catch (const std::exception &ex) {
+        LOG(error) << ex.what();
+      }
+
+      std::map<std::string, std::string> writer_text_map_3;
+      TextMapWriter writer_3(writer_text_map_3);
+
+      auto self_span_3 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_3_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_3->context(), writer_3);
+      auto service_3_client_wrapper_3 = _service_3_client_pool->Pop();
+      if (!service_3_client_wrapper_3) {
+        LOG(error) << "ERROR: Failed to connect to service_3";
         ServiceException se;
         se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
-        se.message = "Failed to connect to service_2";
+        se.message = "Failed to connect to service_3";
         throw se;
       } else {
-        auto service_2_client = service_2_client_wrapper_2->GetClient();
         try {
-          service_2_client->rpc_2(writer_text_map_2);
-          _service_2_client_pool->Keepalive(service_2_client_wrapper_2);
+          service_3_client_wrapper_3->Send("Helloworld\n");
+          _service_3_client_pool->Push(service_3_client_wrapper_3);
         } catch (...) {
           LOG(error) << "ERROR: Failed to send rpc.";
-          _service_2_client_pool->Remove(service_2_client_wrapper_2);
+          _service_3_client_pool->Remove(service_3_client_wrapper_3);
         }
       }
-      self_span_2->Finish();
+      self_span_3->Finish();
 
     });
 
@@ -189,16 +224,19 @@ public:
 
 class service_1CloneFactory : public service_1IfFactory {
 private:
-  ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  // ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  TCPClientPool<MongoTCPClient> *_service_3_client_pool;
   ClientPool<ThriftClient<service_4Client>> *_service_4_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
   explicit service_1CloneFactory(
-      ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      // ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      TCPClientPool<MongoTCPClient> *service_3_client_pool,
       ClientPool<ThriftClient<service_4Client>> *service_4_client_pool,
       uint64_t *pointer_chasing_mem_data) {
-    _service_2_client_pool = service_2_client_pool;
+    // _service_2_client_pool = service_2_client_pool;
+    _service_3_client_pool = service_3_client_pool;
     _service_4_client_pool = service_4_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
   }
@@ -207,7 +245,10 @@ public:
 
   service_1If *
   getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
-    return new service_1Handler(_service_2_client_pool, _service_4_client_pool,
+    return new service_1Handler(
+                                // _service_2_client_pool, 
+                                _service_3_client_pool,
+                                _service_4_client_pool,
                                 _pointer_chasing_mem_data);
   }
 
@@ -252,11 +293,15 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned)time(NULL));
   SetUpTracer("config/jaeger-config.yml", "service_1");
-  std::string service_2_addr = services_json["service_2"]["server_addr"];
-  int service_2_port = services_json["service_2"]["server_port"];
-  ClientPool<ThriftClient<service_2Client>> service_2_client_pool(
-      "service_2", service_2_addr, service_2_port, 0, 512, 10000, 10000,
-      services_json);
+  // std::string service_2_addr = services_json["service_2"]["server_addr"];
+  // int service_2_port = services_json["service_2"]["server_port"];
+  // ClientPool<ThriftClient<service_2Client>> service_2_client_pool(
+  //     "service_2", service_2_addr, service_2_port, 0, 512, 10000, 10000,
+  //     services_json);
+  std::string service_3_addr = services_json["service_3"]["server_addr"];
+  int service_3_port = services_json["service_3"]["server_port"];
+  TCPClientPool<MongoTCPClient> service_3_client_pool(
+      "service_3", service_3_addr, service_3_port, 0, 512, 10000);
 
   std::string service_4_addr = services_json["service_4"]["server_addr"];
   int service_4_port = services_json["service_4"]["server_port"];
@@ -267,7 +312,9 @@ int main(int argc, char *argv[]) {
   int port = services_json["service_1"]["server_port"];
   TThreadedServer server(stdcxx::make_shared<service_1ProcessorFactory>(
                              stdcxx::make_shared<service_1CloneFactory>(
-                                 &service_2_client_pool, &service_4_client_pool,
+                                //  &service_2_client_pool,
+                                 &service_3_client_pool, 
+                                 &service_4_client_pool,
                                  pointer_chasing_mem_data)),
                          stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
                          stdcxx::make_shared<TFramedTransportFactory>(),

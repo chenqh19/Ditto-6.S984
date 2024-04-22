@@ -5,7 +5,8 @@ add_executable(
 	service_1.cpp
 	assembly.cpp
 	${THRIFT_GEN_CPP_DIR}/service_1.cpp
-	${THRIFT_GEN_CPP_DIR}/service_2.cpp
+	# ${THRIFT_GEN_CPP_DIR}/service_2.cpp
+	${THRIFT_GEN_CPP_DIR}/service_3.cpp
 	${THRIFT_GEN_CPP_DIR}/service_4.cpp
 	${THRIFT_GEN_CPP_DIR}/auto_microservices_types.cpp
 )
