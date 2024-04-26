@@ -2,6 +2,7 @@ import argparse
 # import paramiko
 import subprocess
 import multiprocessing
+import time
 
 def set_range(low, high, interval):
     rpss = []
@@ -32,20 +33,21 @@ def run_cmd(gen_work_cmd, output_file):
     process1.join()
     # process2.join()
 
-# def refresh():
-#     refresh_cmd = "sudo docker service update --force test_jaeger-collector"
-#     subprocess.run(refresh_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def refresh():
+    refresh_cmd = "sudo docker service update --force synthetic_social_network-jaeger-1"
+    subprocess.run(refresh_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 output_file = "../output/example.txt"
-base_cmd = "../../wrk2/wrk -D exp -t 20 -c 100 -d 10 -L http://localhost:8010/api/service_0/rpc_0 -R "
+base_cmd = "../../wrk2/wrk -D exp -t 20 -c 100 -d 60 -L http://localhost:8010/api/service_0/rpc_0 -R "
 
-rpss = set_range(700, 900, 40)
+rpss = set_range(360, 520, 40)
 
 for rps in rpss:
     with open(output_file, "a") as f:
         f.write("------new_config------rps:"+str(rps)+"\n")
     gen_work_cmd = base_cmd + str(rps)
     print(gen_work_cmd)
-    for i in range(5):
+    for i in range(3):
         run_cmd(gen_work_cmd, output_file)
-    # refresh()
+        time.sleep(5)
+    refresh()
