@@ -40,7 +40,7 @@ def refresh():
 output_file = "../output/example.txt"
 base_cmd = "../../wrk2/wrk -D exp -t 20 -c 100 -d 60 -L http://localhost:8010/api/service_0/rpc_0 -R "
 
-rpss = set_range(360, 520, 40)
+rpss = set_range(400, 800, 40)
 
 for rps in rpss:
     with open(output_file, "a") as f:
