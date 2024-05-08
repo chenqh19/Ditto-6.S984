@@ -11,10 +11,14 @@ def find_second_smallest(numbers):
 def find_mid_avg(numbers):
     unique_numbers = sorted(set(numbers))
     return unique_numbers[1]
-    if len(unique_numbers) > 1:
-        return round((unique_numbers[1]+unique_numbers[2]+unique_numbers[3])/3, 1)
-    else:
-        return None
+    # if len(unique_numbers) > 1:
+    #     return round((unique_numbers[1]+unique_numbers[2]+unique_numbers[3])/3, 1)
+    # else:
+    #     return None
+
+def find_min(numbers):
+    unique_numbers = sorted(set(numbers))
+    return unique_numbers[0]
 
 def main():
     count = 0
@@ -25,7 +29,7 @@ def main():
             if "new_config" in lines[i]:
                 if i + 3 < len(lines):
                     numbers = [float(line.split()[0]) for line in lines[i+1:i+4]]
-                    rep_num = find_mid_avg(numbers)
+                    rep_num = find_min(numbers)
                     if rep_num is not None:
                         results.append(rep_num)
                     else:
