@@ -182,11 +182,6 @@ public:
       }
       self_span_2->Finish();
 
-      if (!fuWaitVec[1].empty()) {
-        for (auto &i : fuWaitVec[1]) {
-          i.wait();
-        }
-      }
       std::map<std::string, std::string> writer_text_map_21;
       TextMapWriter writer_21(writer_text_map_21);
 
