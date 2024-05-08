@@ -8,6 +8,9 @@
   "rpc_2": {
     "server": "service_2"
   },
+  "rpc_21": {
+    "server": "service_21"
+  },
   "rpc_3": {
     "server": "service_3"
   },

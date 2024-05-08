@@ -1,23 +1,20 @@
 set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g -masm=intel -lpthread")
 
 add_executable(
-	service_1
-	service_1.cpp
+	service_21
+	service_21.cpp
 	assembly.cpp
-	${THRIFT_GEN_CPP_DIR}/service_1.cpp
-	${THRIFT_GEN_CPP_DIR}/service_2.cpp
 	${THRIFT_GEN_CPP_DIR}/service_21.cpp
-	${THRIFT_GEN_CPP_DIR}/service_4.cpp
 	${THRIFT_GEN_CPP_DIR}/auto_microservices_types.cpp
 )
 
 target_include_directories(
-	service_1 PRIVATE
+	service_21 PRIVATE
 	/usr/local/include/jaegertracing
 )
 
 target_link_libraries(
-	service_1
+	service_21
 	${THRIFT_LIB}
 	${CMAKE_THREAD_LIBS_INIT}
 	${Boost_LIBRARIES}
@@ -32,4 +29,4 @@ target_link_libraries(
 	pthread
 )
 
-install(TARGETS service_1 DESTINATION ./)
+install(TARGETS service_21 DESTINATION ./)

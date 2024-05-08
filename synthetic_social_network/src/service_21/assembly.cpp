@@ -4,7 +4,7 @@ void runAssembly0(uint64_t* mem_data, uint64_t req_id, uint64_t* curr_mem_addrs,
   int i = 0;
   for (;;) {
     i++;
-    if (i > 25000) {
+    if (i > 20000) {
       break;
     }
   }

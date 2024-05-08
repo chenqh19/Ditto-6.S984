@@ -41,6 +41,7 @@
 
 #include "../../gen-cpp/service_1.h"
 #include "../../gen-cpp/service_2.h"
+#include "../../gen-cpp/service_21.h"
 #include "../../gen-cpp/service_4.h"
 
 using namespace std;
@@ -62,6 +63,7 @@ static uint64_t *pointer_chasing_mem_data = new uint64_t[256 * 1024 * 1024 / 8];
 class service_1Handler : public service_1If {
 private:
   ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  ClientPool<ThriftClient<service_21Client>> *_service_21_client_pool;
   ClientPool<ThriftClient<service_4Client>> *_service_4_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
@@ -71,9 +73,11 @@ private:
 public:
   explicit service_1Handler(
       ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      ClientPool<ThriftClient<service_21Client>> *service_21_client_pool,
       ClientPool<ThriftClient<service_4Client>> *service_4_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_2_client_pool = service_2_client_pool;
+    _service_21_client_pool = service_21_client_pool;
     _service_4_client_pool = service_4_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[23];
@@ -178,6 +182,36 @@ public:
       }
       self_span_2->Finish();
 
+      if (!fuWaitVec[1].empty()) {
+        for (auto &i : fuWaitVec[1]) {
+          i.wait();
+        }
+      }
+      std::map<std::string, std::string> writer_text_map_21;
+      TextMapWriter writer_21(writer_text_map_21);
+
+      auto self_span_21 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_21_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_21->context(), writer_21);
+      auto service_21_client_wrapper_21 = _service_21_client_pool->Pop();
+      if (!service_21_client_wrapper_21) {
+        LOG(error) << "ERROR: Failed to connect to service_21";
+        ServiceException se;
+        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+        se.message = "Failed to connect to service_21";
+        throw se;
+      } else {
+        auto service_21_client = service_21_client_wrapper_21->GetClient();
+        try {
+          service_21_client->rpc_21(writer_text_map_21);
+          _service_21_client_pool->Keepalive(service_21_client_wrapper_21);
+        } catch (...) {
+          LOG(error) << "ERROR: Failed to send rpc.";
+          _service_21_client_pool->Remove(service_21_client_wrapper_21);
+        }
+      }
+      self_span_21->Finish();
+
     });
 
     for (auto &i : fuVec) {
@@ -190,15 +224,18 @@ public:
 class service_1CloneFactory : public service_1IfFactory {
 private:
   ClientPool<ThriftClient<service_2Client>> *_service_2_client_pool;
+  ClientPool<ThriftClient<service_21Client>> *_service_21_client_pool;
   ClientPool<ThriftClient<service_4Client>> *_service_4_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
   explicit service_1CloneFactory(
       ClientPool<ThriftClient<service_2Client>> *service_2_client_pool,
+      ClientPool<ThriftClient<service_21Client>> *service_21_client_pool,
       ClientPool<ThriftClient<service_4Client>> *service_4_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_2_client_pool = service_2_client_pool;
+    _service_21_client_pool = service_21_client_pool;
     _service_4_client_pool = service_4_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
   }
@@ -207,7 +244,7 @@ public:
 
   service_1If *
   getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
-    return new service_1Handler(_service_2_client_pool, _service_4_client_pool,
+    return new service_1Handler(_service_2_client_pool, _service_21_client_pool, _service_4_client_pool,
                                 _pointer_chasing_mem_data);
   }
 
@@ -258,6 +295,12 @@ int main(int argc, char *argv[]) {
       "service_2", service_2_addr, service_2_port, 0, 512, 10000, 10000,
       services_json);
 
+  std::string service_21_addr = services_json["service_21"]["server_addr"];
+  int service_21_port = services_json["service_21"]["server_port"];
+  ClientPool<ThriftClient<service_21Client>> service_21_client_pool(
+      "service_21", service_21_addr, service_21_port, 0, 512, 10000, 10000,
+      services_json);
+
   std::string service_4_addr = services_json["service_4"]["server_addr"];
   int service_4_port = services_json["service_4"]["server_port"];
   ClientPool<ThriftClient<service_4Client>> service_4_client_pool(
@@ -267,7 +310,7 @@ int main(int argc, char *argv[]) {
   int port = services_json["service_1"]["server_port"];
   TThreadedServer server(stdcxx::make_shared<service_1ProcessorFactory>(
                              stdcxx::make_shared<service_1CloneFactory>(
-                                 &service_2_client_pool, &service_4_client_pool,
+                                 &service_2_client_pool, &service_21_client_pool, &service_4_client_pool,
                                  pointer_chasing_mem_data)),
                          stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
                          stdcxx::make_shared<TFramedTransportFactory>(),

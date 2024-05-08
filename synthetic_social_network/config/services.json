@@ -26,6 +26,15 @@
     "replica" : 1,
     "server_type" : "threaded"
   },
+  "service_21" : {
+    "server_addr" : "service_21",
+    "server_port" : 9000,
+    "rpcs_receive" : [21],
+    "rpcs_send" : [],
+    "scaler" : 1,
+    "replica" : 1,
+    "server_type" : "threaded"
+  },
   "service_3" : {
     "server_addr" : "service_3",
     "server_port" : 9000,
