@@ -39,9 +39,9 @@ def refresh():
     subprocess.run(refresh_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 output_file = "../output/example.txt"
-base_cmd = "../../wrk2/wrk -D exp -t 20 -c 100 -d 60 -L http://localhost:8010/api/service_0/rpc_0 -R "
+base_cmd = "../../wrk2/wrk -D exp -t 20 -c 100 -d 20 -L http://localhost:8010/api/service_0/rpc_0 -R "
 
-rpss = set_range(600, 1000, 40)
+rpss = set_range(600, 1500, 100)
 
 for rps in rpss:
     with open(output_file, "a") as f:
