@@ -115,8 +115,8 @@ public:
 
     _request_id++;
 
-    vector<std::shared_future<void>> fuWaitVec[2];
-    std::shared_future<void> fuVec[2];
+    vector<std::shared_future<void>> fuWaitVec[3];
+    std::shared_future<void> fuVec[3];
 
     fuVec[0] = std::async(std::launch::async, [&]() {
       if (!fuWaitVec[0].empty()) {
@@ -182,11 +182,15 @@ public:
       }
       self_span_2->Finish();
 
-      if (!fuWaitVec[1].empty()) {
-        for (auto &i : fuWaitVec[1]) {
+    });
+
+    fuVec[2] = std::async(std::launch::async, [&]() {
+      if (!fuWaitVec[2].empty()) {
+        for (auto &i : fuWaitVec[2]) {
           i.wait();
         }
       }
+
       std::map<std::string, std::string> writer_text_map_21;
       TextMapWriter writer_21(writer_text_map_21);
 
