@@ -62,6 +62,8 @@ class service_16Handler : public service_16If {
 private:
   ClientPool<ThriftClient<service_17Client>> *_service_17_client_pool;
   TCPClientPool<RedisTCPClient> *_service_20_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_14_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_15_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
   uint64_t *_curr_pointer_chasing_mem_addrs;
@@ -70,10 +72,14 @@ private:
 public:
   explicit service_16Handler(
       ClientPool<ThriftClient<service_17Client>> *service_17_client_pool,
-      TCPClientPool<RedisTCPClient> *service_20_client_pool,
+      TCPClientPool<RedisTCPClient> *service_20_client_pool, 
+      TCPClientPool<RedisTCPClient> *service_14_client_pool,
+      TCPClientPool<RedisTCPClient> *service_15_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_17_client_pool = service_17_client_pool;
     _service_20_client_pool = service_20_client_pool;
+    _service_14_client_pool = service_14_client_pool;
+    _service_15_client_pool = service_15_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[17];
     _curr_pointer_chasing_mem_addrs = new uint64_t[17];
@@ -103,6 +109,8 @@ public:
 
     try {
       runAssembly0(_mem_data, _request_id, _curr_mem_addrs,
+                   _curr_pointer_chasing_mem_addrs);
+      runAssembly1(_mem_data, _request_id, _curr_mem_addrs,
                    _curr_pointer_chasing_mem_addrs);
     } catch (const std::exception &ex) {
       LOG(error) << ex.what();
@@ -159,6 +167,54 @@ public:
     }
     self_span_20->Finish();
 
+    std::map<std::string, std::string> writer_text_map_14;
+    TextMapWriter writer_14(writer_text_map_14);
+
+    auto self_span_14 = opentracing::Tracer::Global()->StartSpan(
+        "rpc_14_client", {opentracing::ChildOf(&(span->context()))});
+    opentracing::Tracer::Global()->Inject(self_span_14->context(), writer_14);
+    auto service_14_client_wrapper_14 = _service_14_client_pool->Pop();
+    if (!service_14_client_wrapper_14) {
+      LOG(error) << "ERROR: Failed to connect to service_14";
+      ServiceException se;
+      se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+      se.message = "Failed to connect to service_14";
+      throw se;
+    } else {
+      try {
+        service_14_client_wrapper_14->Send("Helloworld\n");
+        _service_14_client_pool->Push(service_14_client_wrapper_14);
+      } catch (...) {
+        LOG(error) << "ERROR: Failed to send rpc.";
+        _service_14_client_pool->Remove(service_14_client_wrapper_14);
+      }
+    }
+    self_span_14->Finish();
+
+    std::map<std::string, std::string> writer_text_map_15;
+    TextMapWriter writer_15(writer_text_map_15);
+
+    auto self_span_15 = opentracing::Tracer::Global()->StartSpan(
+        "rpc_15_client", {opentracing::ChildOf(&(span->context()))});
+    opentracing::Tracer::Global()->Inject(self_span_15->context(), writer_15);
+    auto service_15_client_wrapper_15 = _service_15_client_pool->Pop();
+    if (!service_15_client_wrapper_15) {
+      LOG(error) << "ERROR: Failed to connect to service_15";
+      ServiceException se;
+      se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+      se.message = "Failed to connect to service_15";
+      throw se;
+    } else {
+      try {
+        service_15_client_wrapper_15->Send("Helloworld\n");
+        _service_15_client_pool->Push(service_15_client_wrapper_15);
+      } catch (...) {
+        LOG(error) << "ERROR: Failed to send rpc.";
+        _service_15_client_pool->Remove(service_15_client_wrapper_15);
+      }
+    }
+    self_span_15->Finish();
+
     span->Finish();
   }
 };
@@ -167,13 +223,19 @@ class service_16CloneFactory : public service_16IfFactory {
 private:
   ClientPool<ThriftClient<service_17Client>> *_service_17_client_pool;
   TCPClientPool<RedisTCPClient> *_service_20_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_14_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_15_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
   explicit service_16CloneFactory(
       ClientPool<ThriftClient<service_17Client>> *service_17_client_pool,
       TCPClientPool<RedisTCPClient> *service_20_client_pool,
+      TCPClientPool<RedisTCPClient> *service_14_client_pool,
+      TCPClientPool<RedisTCPClient> *service_15_client_pool,
       uint64_t *pointer_chasing_mem_data) {
+    _service_14_client_pool = service_14_client_pool;
+    _service_15_client_pool = service_15_client_pool;
     _service_17_client_pool = service_17_client_pool;
     _service_20_client_pool = service_20_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
@@ -185,6 +247,8 @@ public:
   getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
     return new service_16Handler(_service_17_client_pool,
                                  _service_20_client_pool,
+                                 _service_14_client_pool,
+                                 _service_15_client_pool,
                                  _pointer_chasing_mem_data);
   }
 
@@ -240,11 +304,23 @@ int main(int argc, char *argv[]) {
   TCPClientPool<RedisTCPClient> service_20_client_pool(
       "service_20", service_20_addr, service_20_port, 0, 512, 10000);
 
+  std::string service_14_addr = services_json["service_14"]["server_addr"];
+  int service_14_port = services_json["service_14"]["server_port"];
+  TCPClientPool<RedisTCPClient> service_14_client_pool(
+      "service_14", service_14_addr, service_14_port, 0, 512, 10000);
+
+  std::string service_15_addr = services_json["service_15"]["server_addr"];
+  int service_15_port = services_json["service_15"]["server_port"];
+  TCPClientPool<RedisTCPClient> service_15_client_pool(
+      "service_15", service_15_addr, service_15_port, 0, 512, 10000);
+
+
   int port = services_json["service_16"]["server_port"];
   TThreadedServer server(
       stdcxx::make_shared<service_16ProcessorFactory>(
           stdcxx::make_shared<service_16CloneFactory>(
               &service_17_client_pool, &service_20_client_pool,
+              &service_14_client_pool, &service_15_client_pool,
               pointer_chasing_mem_data)),
       stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
       stdcxx::make_shared<TFramedTransportFactory>(),

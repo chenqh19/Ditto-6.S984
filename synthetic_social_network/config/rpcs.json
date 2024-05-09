@@ -38,9 +38,6 @@
   "rpc_12": {
     "server": "service_12"
   },
-  "rpc_13": {
-    "server": "service_13"
-  },
   "rpc_14": {
     "server": "service_14"
   },

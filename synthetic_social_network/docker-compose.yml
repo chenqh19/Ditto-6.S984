@@ -33,7 +33,7 @@ services:
     hostname: service_20
     restart: always
     init: true
-    entrypoint: service_20 -n 2
+    entrypoint: service_20
     volumes:
       - /home/lana/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
@@ -44,7 +44,7 @@ services:
     init: true
     entrypoint: service_5 -n 4
     volumes:
-      - /home/lana/synthetic_social_network/config/:/auto_microservices/config
+      - /home/lana/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_4:
     image: ml2585/synthetic_social_network:tcp
@@ -114,7 +114,7 @@ services:
     hostname: service_14
     restart: always
     init: true
-    entrypoint: service_14 -n 2
+    entrypoint: service_14
     volumes:
       - /home/lana/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 

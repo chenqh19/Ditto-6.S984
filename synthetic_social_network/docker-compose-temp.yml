@@ -154,15 +154,6 @@ services:
     volumes:
       - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
 
-  service_13:
-    image: yg397/synthetic_social_network:tcp
-    hostname: service_13
-    restart: always
-    init: true
-    entrypoint: service_13
-    volumes:
-      - /filer-01/yg397/Ditto/applications/synthetic_social_network/config/:/auto_microservices/config
-
   service_12:
     image: yg397/synthetic_social_network:tcp
     hostname: service_12

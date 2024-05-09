@@ -256,21 +256,6 @@ services:
     volumes:
       - /home/lana/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
-  service_13:
-    image: ml2585/synthetic_social_network:tcp
-    hostname: service_13
-    restart: always
-    # init: true
-    entrypoint: service_13
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.type == front
-    volumes:
-      - /home/lana/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
-
   service_12:
     image: ml2585/synthetic_social_network:tcp
     hostname: service_12

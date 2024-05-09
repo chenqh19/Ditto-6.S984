@@ -3,7 +3,7 @@
     "server_addr" : "service_0",
     "server_port" : 9000,
     "rpcs_receive" : [0],
-    "rpcs_send" : [1,7,9,10,11,13,16],
+    "rpcs_send" : [1,7,9,10,11,16],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
