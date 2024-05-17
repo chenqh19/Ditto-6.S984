@@ -5,12 +5,6 @@ add_executable(
 	service_0.cpp
 	assembly.cpp
 	${THRIFT_GEN_CPP_DIR}/service_0.cpp
-	${THRIFT_GEN_CPP_DIR}/service_1.cpp
-	${THRIFT_GEN_CPP_DIR}/service_7.cpp
-	${THRIFT_GEN_CPP_DIR}/service_9.cpp
-	${THRIFT_GEN_CPP_DIR}/service_10.cpp
-	${THRIFT_GEN_CPP_DIR}/service_11.cpp
-	${THRIFT_GEN_CPP_DIR}/service_13.cpp
 	${THRIFT_GEN_CPP_DIR}/service_16.cpp
 	${THRIFT_GEN_CPP_DIR}/auto_microservices_types.cpp
 )

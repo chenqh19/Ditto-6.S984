@@ -60,7 +60,6 @@ static uint64_t *pointer_chasing_mem_data = new uint64_t[4 * 1024 * 1024 / 8];
 class service_17Handler : public service_17If {
 private:
   TCPClientPool<RedisTCPClient> *_service_18_client_pool;
-  TCPClientPool<MongoTCPClient> *_service_19_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
   uint64_t *_curr_pointer_chasing_mem_addrs;
@@ -69,10 +68,8 @@ private:
 public:
   explicit service_17Handler(
       TCPClientPool<RedisTCPClient> *service_18_client_pool,
-      TCPClientPool<MongoTCPClient> *service_19_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_18_client_pool = service_18_client_pool;
-    _service_19_client_pool = service_19_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[17];
     _curr_pointer_chasing_mem_addrs = new uint64_t[17];
@@ -140,16 +137,13 @@ public:
 class service_17CloneFactory : public service_17IfFactory {
 private:
   TCPClientPool<RedisTCPClient> *_service_18_client_pool;
-  TCPClientPool<MongoTCPClient> *_service_19_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
   explicit service_17CloneFactory(
       TCPClientPool<RedisTCPClient> *service_18_client_pool,
-      TCPClientPool<MongoTCPClient> *service_19_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_18_client_pool = service_18_client_pool;
-    _service_19_client_pool = service_19_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
   }
 
@@ -158,7 +152,6 @@ public:
   service_17If *
   getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
     return new service_17Handler(_service_18_client_pool,
-                                 _service_19_client_pool,
                                  _pointer_chasing_mem_data);
   }
 
@@ -208,16 +201,11 @@ int main(int argc, char *argv[]) {
   TCPClientPool<RedisTCPClient> service_18_client_pool(
       "service_18", service_18_addr, service_18_port, 0, 512, 10000);
 
-  std::string service_19_addr = services_json["service_19"]["server_addr"];
-  int service_19_port = services_json["service_19"]["server_port"];
-  TCPClientPool<MongoTCPClient> service_19_client_pool(
-      "service_19", service_19_addr, service_19_port, 0, 512, 10000);
-
   int port = services_json["service_17"]["server_port"];
   TThreadedServer server(
       stdcxx::make_shared<service_17ProcessorFactory>(
           stdcxx::make_shared<service_17CloneFactory>(
-              &service_18_client_pool, &service_19_client_pool,
+              &service_18_client_pool,
               pointer_chasing_mem_data)),
       stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
       stdcxx::make_shared<TFramedTransportFactory>(),
