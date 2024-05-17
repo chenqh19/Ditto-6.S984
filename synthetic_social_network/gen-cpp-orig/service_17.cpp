@@ -4,16 +4,16 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated
  */
-#include "service_18.h"
+#include "service_17.h"
 
 namespace auto_microservices {
 
 
-service_18_rpc_18_args::~service_18_rpc_18_args() throw() {
+service_17_rpc_17_args::~service_17_rpc_17_args() throw() {
 }
 
 
-uint32_t service_18_rpc_18_args::read(::apache::thrift::protocol::TProtocol* iprot) {
+uint32_t service_17_rpc_17_args::read(::apache::thrift::protocol::TProtocol* iprot) {
 
   ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
@@ -38,17 +38,17 @@ uint32_t service_18_rpc_18_args::read(::apache::thrift::protocol::TProtocol* ipr
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->carrier.clear();
-            uint32_t _size30;
-            ::apache::thrift::protocol::TType _ktype31;
-            ::apache::thrift::protocol::TType _vtype32;
-            xfer += iprot->readMapBegin(_ktype31, _vtype32, _size30);
-            uint32_t _i34;
-            for (_i34 = 0; _i34 < _size30; ++_i34)
+            uint32_t _size156;
+            ::apache::thrift::protocol::TType _ktype157;
+            ::apache::thrift::protocol::TType _vtype158;
+            xfer += iprot->readMapBegin(_ktype157, _vtype158, _size156);
+            uint32_t _i160;
+            for (_i160 = 0; _i160 < _size156; ++_i160)
             {
-              std::string _key35;
-              xfer += iprot->readString(_key35);
-              std::string& _val36 = this->carrier[_key35];
-              xfer += iprot->readString(_val36);
+              std::string _key161;
+              xfer += iprot->readString(_key161);
+              std::string& _val162 = this->carrier[_key161];
+              xfer += iprot->readString(_val162);
             }
             xfer += iprot->readMapEnd();
           }
@@ -69,19 +69,19 @@ uint32_t service_18_rpc_18_args::read(::apache::thrift::protocol::TProtocol* ipr
   return xfer;
 }
 
-uint32_t service_18_rpc_18_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t service_17_rpc_17_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
   ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
-  xfer += oprot->writeStructBegin("service_18_rpc_18_args");
+  xfer += oprot->writeStructBegin("service_17_rpc_17_args");
 
   xfer += oprot->writeFieldBegin("carrier", ::apache::thrift::protocol::T_MAP, 1);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_STRING, ::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->carrier.size()));
-    std::map<std::string, std::string> ::const_iterator _iter37;
-    for (_iter37 = this->carrier.begin(); _iter37 != this->carrier.end(); ++_iter37)
+    std::map<std::string, std::string> ::const_iterator _iter163;
+    for (_iter163 = this->carrier.begin(); _iter163 != this->carrier.end(); ++_iter163)
     {
-      xfer += oprot->writeString(_iter37->first);
-      xfer += oprot->writeString(_iter37->second);
+      xfer += oprot->writeString(_iter163->first);
+      xfer += oprot->writeString(_iter163->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -93,23 +93,23 @@ uint32_t service_18_rpc_18_args::write(::apache::thrift::protocol::TProtocol* op
 }
 
 
-service_18_rpc_18_pargs::~service_18_rpc_18_pargs() throw() {
+service_17_rpc_17_pargs::~service_17_rpc_17_pargs() throw() {
 }
 
 
-uint32_t service_18_rpc_18_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t service_17_rpc_17_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
   ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
-  xfer += oprot->writeStructBegin("service_18_rpc_18_pargs");
+  xfer += oprot->writeStructBegin("service_17_rpc_17_pargs");
 
   xfer += oprot->writeFieldBegin("carrier", ::apache::thrift::protocol::T_MAP, 1);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_STRING, ::apache::thrift::protocol::T_STRING, static_cast<uint32_t>((*(this->carrier)).size()));
-    std::map<std::string, std::string> ::const_iterator _iter38;
-    for (_iter38 = (*(this->carrier)).begin(); _iter38 != (*(this->carrier)).end(); ++_iter38)
+    std::map<std::string, std::string> ::const_iterator _iter164;
+    for (_iter164 = (*(this->carrier)).begin(); _iter164 != (*(this->carrier)).end(); ++_iter164)
     {
-      xfer += oprot->writeString(_iter38->first);
-      xfer += oprot->writeString(_iter38->second);
+      xfer += oprot->writeString(_iter164->first);
+      xfer += oprot->writeString(_iter164->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -121,11 +121,11 @@ uint32_t service_18_rpc_18_pargs::write(::apache::thrift::protocol::TProtocol* o
 }
 
 
-service_18_rpc_18_result::~service_18_rpc_18_result() throw() {
+service_17_rpc_17_result::~service_17_rpc_17_result() throw() {
 }
 
 
-uint32_t service_18_rpc_18_result::read(::apache::thrift::protocol::TProtocol* iprot) {
+uint32_t service_17_rpc_17_result::read(::apache::thrift::protocol::TProtocol* iprot) {
 
   ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
@@ -166,11 +166,11 @@ uint32_t service_18_rpc_18_result::read(::apache::thrift::protocol::TProtocol* i
   return xfer;
 }
 
-uint32_t service_18_rpc_18_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t service_17_rpc_17_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
 
   uint32_t xfer = 0;
 
-  xfer += oprot->writeStructBegin("service_18_rpc_18_result");
+  xfer += oprot->writeStructBegin("service_17_rpc_17_result");
 
   if (this->__isset.se) {
     xfer += oprot->writeFieldBegin("se", ::apache::thrift::protocol::T_STRUCT, 1);
@@ -183,11 +183,11 @@ uint32_t service_18_rpc_18_result::write(::apache::thrift::protocol::TProtocol* 
 }
 
 
-service_18_rpc_18_presult::~service_18_rpc_18_presult() throw() {
+service_17_rpc_17_presult::~service_17_rpc_17_presult() throw() {
 }
 
 
-uint32_t service_18_rpc_18_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
+uint32_t service_17_rpc_17_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
 
   ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
@@ -228,18 +228,18 @@ uint32_t service_18_rpc_18_presult::read(::apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
-void service_18Client::rpc_18(const std::map<std::string, std::string> & carrier)
+void service_17Client::rpc_17(const std::map<std::string, std::string> & carrier)
 {
-  send_rpc_18(carrier);
-  recv_rpc_18();
+  send_rpc_17(carrier);
+  recv_rpc_17();
 }
 
-void service_18Client::send_rpc_18(const std::map<std::string, std::string> & carrier)
+void service_17Client::send_rpc_17(const std::map<std::string, std::string> & carrier)
 {
   int32_t cseqid = 0;
-  oprot_->writeMessageBegin("rpc_18", ::apache::thrift::protocol::T_CALL, cseqid);
+  oprot_->writeMessageBegin("rpc_17", ::apache::thrift::protocol::T_CALL, cseqid);
 
-  service_18_rpc_18_pargs args;
+  service_17_rpc_17_pargs args;
   args.carrier = &carrier;
   args.write(oprot_);
 
@@ -248,7 +248,7 @@ void service_18Client::send_rpc_18(const std::map<std::string, std::string> & ca
   oprot_->getTransport()->flush();
 }
 
-void service_18Client::recv_rpc_18()
+void service_17Client::recv_rpc_17()
 {
 
   int32_t rseqid = 0;
@@ -268,12 +268,12 @@ void service_18Client::recv_rpc_18()
     iprot_->readMessageEnd();
     iprot_->getTransport()->readEnd();
   }
-  if (fname.compare("rpc_18") != 0) {
+  if (fname.compare("rpc_17") != 0) {
     iprot_->skip(::apache::thrift::protocol::T_STRUCT);
     iprot_->readMessageEnd();
     iprot_->getTransport()->readEnd();
   }
-  service_18_rpc_18_presult result;
+  service_17_rpc_17_presult result;
   result.read(iprot_);
   iprot_->readMessageEnd();
   iprot_->getTransport()->readEnd();
@@ -284,7 +284,7 @@ void service_18Client::recv_rpc_18()
   return;
 }
 
-bool service_18Processor::dispatchCall(::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, const std::string& fname, int32_t seqid, void* callContext) {
+bool service_17Processor::dispatchCall(::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, const std::string& fname, int32_t seqid, void* callContext) {
   ProcessMap::iterator pfn;
   pfn = processMap_.find(fname);
   if (pfn == processMap_.end()) {
@@ -303,40 +303,40 @@ bool service_18Processor::dispatchCall(::apache::thrift::protocol::TProtocol* ip
   return true;
 }
 
-void service_18Processor::process_rpc_18(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
+void service_17Processor::process_rpc_17(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
 {
   void* ctx = NULL;
   if (this->eventHandler_.get() != NULL) {
-    ctx = this->eventHandler_->getContext("service_18.rpc_18", callContext);
+    ctx = this->eventHandler_->getContext("service_17.rpc_17", callContext);
   }
-  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "service_18.rpc_18");
+  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "service_17.rpc_17");
 
   if (this->eventHandler_.get() != NULL) {
-    this->eventHandler_->preRead(ctx, "service_18.rpc_18");
+    this->eventHandler_->preRead(ctx, "service_17.rpc_17");
   }
 
-  service_18_rpc_18_args args;
+  service_17_rpc_17_args args;
   args.read(iprot);
   iprot->readMessageEnd();
   uint32_t bytes = iprot->getTransport()->readEnd();
 
   if (this->eventHandler_.get() != NULL) {
-    this->eventHandler_->postRead(ctx, "service_18.rpc_18", bytes);
+    this->eventHandler_->postRead(ctx, "service_17.rpc_17", bytes);
   }
 
-  service_18_rpc_18_result result;
+  service_17_rpc_17_result result;
   try {
-    iface_->rpc_18(args.carrier);
+    iface_->rpc_17(args.carrier);
   } catch (ServiceException &se) {
     result.se = se;
     result.__isset.se = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != NULL) {
-      this->eventHandler_->handlerError(ctx, "service_18.rpc_18");
+      this->eventHandler_->handlerError(ctx, "service_17.rpc_17");
     }
 
     ::apache::thrift::TApplicationException x(e.what());
-    oprot->writeMessageBegin("rpc_18", ::apache::thrift::protocol::T_EXCEPTION, seqid);
+    oprot->writeMessageBegin("rpc_17", ::apache::thrift::protocol::T_EXCEPTION, seqid);
     x.write(oprot);
     oprot->writeMessageEnd();
     oprot->getTransport()->writeEnd();
@@ -345,40 +345,40 @@ void service_18Processor::process_rpc_18(int32_t seqid, ::apache::thrift::protoc
   }
 
   if (this->eventHandler_.get() != NULL) {
-    this->eventHandler_->preWrite(ctx, "service_18.rpc_18");
+    this->eventHandler_->preWrite(ctx, "service_17.rpc_17");
   }
 
-  oprot->writeMessageBegin("rpc_18", ::apache::thrift::protocol::T_REPLY, seqid);
+  oprot->writeMessageBegin("rpc_17", ::apache::thrift::protocol::T_REPLY, seqid);
   result.write(oprot);
   oprot->writeMessageEnd();
   bytes = oprot->getTransport()->writeEnd();
   oprot->getTransport()->flush();
 
   if (this->eventHandler_.get() != NULL) {
-    this->eventHandler_->postWrite(ctx, "service_18.rpc_18", bytes);
+    this->eventHandler_->postWrite(ctx, "service_17.rpc_17", bytes);
   }
 }
 
-::apache::thrift::stdcxx::shared_ptr< ::apache::thrift::TProcessor > service_18ProcessorFactory::getProcessor(const ::apache::thrift::TConnectionInfo& connInfo) {
-  ::apache::thrift::ReleaseHandler< service_18IfFactory > cleanup(handlerFactory_);
-  ::apache::thrift::stdcxx::shared_ptr< service_18If > handler(handlerFactory_->getHandler(connInfo), cleanup);
-  ::apache::thrift::stdcxx::shared_ptr< ::apache::thrift::TProcessor > processor(new service_18Processor(handler));
+::apache::thrift::stdcxx::shared_ptr< ::apache::thrift::TProcessor > service_17ProcessorFactory::getProcessor(const ::apache::thrift::TConnectionInfo& connInfo) {
+  ::apache::thrift::ReleaseHandler< service_17IfFactory > cleanup(handlerFactory_);
+  ::apache::thrift::stdcxx::shared_ptr< service_17If > handler(handlerFactory_->getHandler(connInfo), cleanup);
+  ::apache::thrift::stdcxx::shared_ptr< ::apache::thrift::TProcessor > processor(new service_17Processor(handler));
   return processor;
 }
 
-void service_18ConcurrentClient::rpc_18(const std::map<std::string, std::string> & carrier)
+void service_17ConcurrentClient::rpc_17(const std::map<std::string, std::string> & carrier)
 {
-  int32_t seqid = send_rpc_18(carrier);
-  recv_rpc_18(seqid);
+  int32_t seqid = send_rpc_17(carrier);
+  recv_rpc_17(seqid);
 }
 
-int32_t service_18ConcurrentClient::send_rpc_18(const std::map<std::string, std::string> & carrier)
+int32_t service_17ConcurrentClient::send_rpc_17(const std::map<std::string, std::string> & carrier)
 {
   int32_t cseqid = this->sync_.generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(&this->sync_);
-  oprot_->writeMessageBegin("rpc_18", ::apache::thrift::protocol::T_CALL, cseqid);
+  oprot_->writeMessageBegin("rpc_17", ::apache::thrift::protocol::T_CALL, cseqid);
 
-  service_18_rpc_18_pargs args;
+  service_17_rpc_17_pargs args;
   args.carrier = &carrier;
   args.write(oprot_);
 
@@ -390,7 +390,7 @@ int32_t service_18ConcurrentClient::send_rpc_18(const std::map<std::string, std:
   return cseqid;
 }
 
-void service_18ConcurrentClient::recv_rpc_18(const int32_t seqid)
+void service_17ConcurrentClient::recv_rpc_17(const int32_t seqid)
 {
 
   int32_t rseqid = 0;
@@ -419,7 +419,7 @@ void service_18ConcurrentClient::recv_rpc_18(const int32_t seqid)
         iprot_->readMessageEnd();
         iprot_->getTransport()->readEnd();
       }
-      if (fname.compare("rpc_18") != 0) {
+      if (fname.compare("rpc_17") != 0) {
         iprot_->skip(::apache::thrift::protocol::T_STRUCT);
         iprot_->readMessageEnd();
         iprot_->getTransport()->readEnd();
@@ -428,7 +428,7 @@ void service_18ConcurrentClient::recv_rpc_18(const int32_t seqid)
         using ::apache::thrift::protocol::TProtocolException;
         throw TProtocolException(TProtocolException::INVALID_DATA);
       }
-      service_18_rpc_18_presult result;
+      service_17_rpc_17_presult result;
       result.read(iprot_);
       iprot_->readMessageEnd();
       iprot_->getTransport()->readEnd();

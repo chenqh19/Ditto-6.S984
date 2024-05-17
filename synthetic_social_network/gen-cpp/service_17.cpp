@@ -38,17 +38,17 @@ uint32_t service_17_rpc_17_args::read(::apache::thrift::protocol::TProtocol* ipr
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->carrier.clear();
-            uint32_t _size156;
-            ::apache::thrift::protocol::TType _ktype157;
-            ::apache::thrift::protocol::TType _vtype158;
-            xfer += iprot->readMapBegin(_ktype157, _vtype158, _size156);
-            uint32_t _i160;
-            for (_i160 = 0; _i160 < _size156; ++_i160)
+            uint32_t _size21;
+            ::apache::thrift::protocol::TType _ktype22;
+            ::apache::thrift::protocol::TType _vtype23;
+            xfer += iprot->readMapBegin(_ktype22, _vtype23, _size21);
+            uint32_t _i25;
+            for (_i25 = 0; _i25 < _size21; ++_i25)
             {
-              std::string _key161;
-              xfer += iprot->readString(_key161);
-              std::string& _val162 = this->carrier[_key161];
-              xfer += iprot->readString(_val162);
+              std::string _key26;
+              xfer += iprot->readString(_key26);
+              std::string& _val27 = this->carrier[_key26];
+              xfer += iprot->readString(_val27);
             }
             xfer += iprot->readMapEnd();
           }
@@ -77,11 +77,11 @@ uint32_t service_17_rpc_17_args::write(::apache::thrift::protocol::TProtocol* op
   xfer += oprot->writeFieldBegin("carrier", ::apache::thrift::protocol::T_MAP, 1);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_STRING, ::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->carrier.size()));
-    std::map<std::string, std::string> ::const_iterator _iter163;
-    for (_iter163 = this->carrier.begin(); _iter163 != this->carrier.end(); ++_iter163)
+    std::map<std::string, std::string> ::const_iterator _iter28;
+    for (_iter28 = this->carrier.begin(); _iter28 != this->carrier.end(); ++_iter28)
     {
-      xfer += oprot->writeString(_iter163->first);
-      xfer += oprot->writeString(_iter163->second);
+      xfer += oprot->writeString(_iter28->first);
+      xfer += oprot->writeString(_iter28->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -105,11 +105,11 @@ uint32_t service_17_rpc_17_pargs::write(::apache::thrift::protocol::TProtocol* o
   xfer += oprot->writeFieldBegin("carrier", ::apache::thrift::protocol::T_MAP, 1);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_STRING, ::apache::thrift::protocol::T_STRING, static_cast<uint32_t>((*(this->carrier)).size()));
-    std::map<std::string, std::string> ::const_iterator _iter164;
-    for (_iter164 = (*(this->carrier)).begin(); _iter164 != (*(this->carrier)).end(); ++_iter164)
+    std::map<std::string, std::string> ::const_iterator _iter29;
+    for (_iter29 = (*(this->carrier)).begin(); _iter29 != (*(this->carrier)).end(); ++_iter29)
     {
-      xfer += oprot->writeString(_iter164->first);
-      xfer += oprot->writeString(_iter164->second);
+      xfer += oprot->writeString(_iter29->first);
+      xfer += oprot->writeString(_iter29->second);
     }
     xfer += oprot->writeMapEnd();
   }

@@ -40,3 +40,13 @@ pip install paramiko
 cd wrk2
 make
 cd ..
+
+cd ~
+wget https://archive.apache.org/dist/thrift/0.12.0/thrift-0.12.0.tar.gz
+tar -zxvf thrift-0.12.0.tar.gz
+sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev
+cd thrift-0.12.0/
+./configure
+make
+sudo make install
+# thrift should be used as /usr/local/bin/thrift

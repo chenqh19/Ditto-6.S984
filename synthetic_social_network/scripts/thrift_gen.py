@@ -31,9 +31,9 @@ def main(argv):
       print >> f, ""
 
   f.close()
-  os.system("cd ../ && thrift -r --gen cpp scripts/auto_microservices.thrift")
-  os.system("cd ../ && thrift -r --gen lua scripts/auto_microservices.thrift")
-  os.system("rm auto_microservices.thrift")
+  # os.system("cd ../ && thrift -r --gen cpp scripts/auto_microservices.thrift")
+  # os.system("cd ../ && thrift -r --gen lua scripts/auto_microservices.thrift")
+  # os.system("rm auto_microservices.thrift")
 
 if __name__ == "__main__":
   main(sys.argv[1:])
