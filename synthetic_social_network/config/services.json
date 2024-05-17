@@ -3,7 +3,7 @@
     "server_addr" : "service_0",
     "server_port" : 9000,
     "rpcs_receive" : [0],
-    "rpcs_send" : [1,7,9,10,11,13,16],
+    "rpcs_send" : [1,7,9,10,11,13],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
@@ -120,7 +120,7 @@
     "server_addr" : "service_13",
     "server_port" : 9000,
     "rpcs_receive" : [13],
-    "rpcs_send" : [14,15],
+    "rpcs_send" : [14,15,17,20],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
@@ -142,15 +142,6 @@
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "redis"
-  },
-  "service_16" : {
-    "server_addr" : "service_16",
-    "server_port" : 9000,
-    "rpcs_receive" : [16],
-    "rpcs_send" : [17,20],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
   },
   "service_17" : {
     "server_addr" : "service_17",

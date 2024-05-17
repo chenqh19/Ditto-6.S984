@@ -40,6 +40,7 @@
 #include "utils.h"
 
 #include "../../gen-cpp/service_13.h"
+#include "../../gen-cpp/service_17.h"
 
 using namespace std;
 using namespace apache::thrift;
@@ -61,6 +62,8 @@ class service_13Handler : public service_13If {
 private:
   TCPClientPool<RedisTCPClient> *_service_14_client_pool;
   TCPClientPool<RedisTCPClient> *_service_15_client_pool;
+  ClientPool<ThriftClient<service_17Client>> *_service_17_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_20_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
   uint64_t *_curr_pointer_chasing_mem_addrs;
@@ -70,9 +73,13 @@ public:
   explicit service_13Handler(
       TCPClientPool<RedisTCPClient> *service_14_client_pool,
       TCPClientPool<RedisTCPClient> *service_15_client_pool,
+      ClientPool<ThriftClient<service_17Client>> *service_17_client_pool,
+      TCPClientPool<RedisTCPClient> *service_20_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_14_client_pool = service_14_client_pool;
     _service_15_client_pool = service_15_client_pool;
+    _service_17_client_pool = service_17_client_pool;
+    _service_20_client_pool = service_20_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[17];
     _curr_pointer_chasing_mem_addrs = new uint64_t[17];
@@ -107,55 +114,131 @@ public:
       LOG(error) << ex.what();
     }
 
+    try {
+      runAssembly1(_mem_data, _request_id, _curr_mem_addrs,
+                   _curr_pointer_chasing_mem_addrs);
+    } catch (const std::exception &ex) {
+      LOG(error) << ex.what();
+    }
+
     _request_id++;
 
-    std::map<std::string, std::string> writer_text_map_14;
-    TextMapWriter writer_14(writer_text_map_14);
+    vector<std::shared_future<void>> fuWaitVec[2];
+    std::shared_future<void> fuVec[2];
 
-    auto self_span_14 = opentracing::Tracer::Global()->StartSpan(
-        "rpc_14_client", {opentracing::ChildOf(&(span->context()))});
-    opentracing::Tracer::Global()->Inject(self_span_14->context(), writer_14);
-    auto service_14_client_wrapper_14 = _service_14_client_pool->Pop();
-    if (!service_14_client_wrapper_14) {
-      LOG(error) << "ERROR: Failed to connect to service_14";
-      ServiceException se;
-      se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
-      se.message = "Failed to connect to service_14";
-      throw se;
-    } else {
-      try {
-        service_14_client_wrapper_14->Send("Helloworld\n");
-        _service_14_client_pool->Push(service_14_client_wrapper_14);
-      } catch (...) {
-        LOG(error) << "ERROR: Failed to send rpc.";
-        _service_14_client_pool->Remove(service_14_client_wrapper_14);
+    fuVec[0] = std::async(std::launch::async, [&]() {
+      if (!fuWaitVec[0].empty()) {
+        for (auto &i : fuWaitVec[0]) {
+          i.wait();
+        }
       }
-    }
-    self_span_14->Finish();
+      std::map<std::string, std::string> writer_text_map_14;
+      TextMapWriter writer_14(writer_text_map_14);
 
-    std::map<std::string, std::string> writer_text_map_15;
-    TextMapWriter writer_15(writer_text_map_15);
-
-    auto self_span_15 = opentracing::Tracer::Global()->StartSpan(
-        "rpc_15_client", {opentracing::ChildOf(&(span->context()))});
-    opentracing::Tracer::Global()->Inject(self_span_15->context(), writer_15);
-    auto service_15_client_wrapper_15 = _service_15_client_pool->Pop();
-    if (!service_15_client_wrapper_15) {
-      LOG(error) << "ERROR: Failed to connect to service_15";
-      ServiceException se;
-      se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
-      se.message = "Failed to connect to service_15";
-      throw se;
-    } else {
-      try {
-        service_15_client_wrapper_15->Send("Helloworld\n");
-        _service_15_client_pool->Push(service_15_client_wrapper_15);
-      } catch (...) {
-        LOG(error) << "ERROR: Failed to send rpc.";
-        _service_15_client_pool->Remove(service_15_client_wrapper_15);
+      auto self_span_14 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_14_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_14->context(), writer_14);
+      auto service_14_client_wrapper_14 = _service_14_client_pool->Pop();
+      if (!service_14_client_wrapper_14) {
+        LOG(error) << "ERROR: Failed to connect to service_14";
+        ServiceException se;
+        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+        se.message = "Failed to connect to service_14";
+        throw se;
+      } else {
+        try {
+          service_14_client_wrapper_14->Send("Helloworld\n");
+          _service_14_client_pool->Push(service_14_client_wrapper_14);
+        } catch (...) {
+          LOG(error) << "ERROR: Failed to send rpc.";
+          _service_14_client_pool->Remove(service_14_client_wrapper_14);
+        }
       }
+      self_span_14->Finish();
+
+      std::map<std::string, std::string> writer_text_map_15;
+      TextMapWriter writer_15(writer_text_map_15);
+
+      auto self_span_15 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_15_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_15->context(), writer_15);
+      auto service_15_client_wrapper_15 = _service_15_client_pool->Pop();
+      if (!service_15_client_wrapper_15) {
+        LOG(error) << "ERROR: Failed to connect to service_15";
+        ServiceException se;
+        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+        se.message = "Failed to connect to service_15";
+        throw se;
+      } else {
+        try {
+          service_15_client_wrapper_15->Send("Helloworld\n");
+          _service_15_client_pool->Push(service_15_client_wrapper_15);
+        } catch (...) {
+          LOG(error) << "ERROR: Failed to send rpc.";
+          _service_15_client_pool->Remove(service_15_client_wrapper_15);
+        }
+      }
+      self_span_15->Finish();
+    });
+    fuVec[1] = std::async(std::launch::async, [&]() {
+      if (!fuWaitVec[1].empty()) {
+        for (auto &i : fuWaitVec[1]) {
+          i.wait();
+        }
+      }
+      std::map<std::string, std::string> writer_text_map_17;
+      TextMapWriter writer_17(writer_text_map_17);
+
+      auto self_span_17 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_17_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_17->context(), writer_17);
+      auto service_17_client_wrapper_17 = _service_17_client_pool->Pop();
+      if (!service_17_client_wrapper_17) {
+        LOG(error) << "ERROR: Failed to connect to service_17";
+        ServiceException se;
+        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+        se.message = "Failed to connect to service_17";
+        throw se;
+      } else {
+        auto service_17_client = service_17_client_wrapper_17->GetClient();
+        try {
+          service_17_client->rpc_17(writer_text_map_17);
+          _service_17_client_pool->Keepalive(service_17_client_wrapper_17);
+        } catch (...) {
+          LOG(error) << "ERROR: Failed to send rpc.";
+          _service_17_client_pool->Remove(service_17_client_wrapper_17);
+        }
+      }
+      self_span_17->Finish();
+
+      std::map<std::string, std::string> writer_text_map_20;
+      TextMapWriter writer_20(writer_text_map_20);
+
+      auto self_span_20 = opentracing::Tracer::Global()->StartSpan(
+          "rpc_20_client", {opentracing::ChildOf(&(span->context()))});
+      opentracing::Tracer::Global()->Inject(self_span_20->context(), writer_20);
+      auto service_20_client_wrapper_20 = _service_20_client_pool->Pop();
+      if (!service_20_client_wrapper_20) {
+        LOG(error) << "ERROR: Failed to connect to service_20";
+        ServiceException se;
+        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+        se.message = "Failed to connect to service_20";
+        throw se;
+      } else {
+        try {
+          service_20_client_wrapper_20->Send("Helloworld\n");
+          _service_20_client_pool->Push(service_20_client_wrapper_20);
+        } catch (...) {
+          LOG(error) << "ERROR: Failed to send rpc.";
+          _service_20_client_pool->Remove(service_20_client_wrapper_20);
+        }
+      }
+      self_span_20->Finish();
+    });
+
+    for (auto &i : fuVec) {
+      i.wait();
     }
-    self_span_15->Finish();
 
     span->Finish();
   }
@@ -165,15 +248,21 @@ class service_13CloneFactory : public service_13IfFactory {
 private:
   TCPClientPool<RedisTCPClient> *_service_14_client_pool;
   TCPClientPool<RedisTCPClient> *_service_15_client_pool;
+  ClientPool<ThriftClient<service_17Client>> *_service_17_client_pool;
+  TCPClientPool<RedisTCPClient> *_service_20_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
   explicit service_13CloneFactory(
       TCPClientPool<RedisTCPClient> *service_14_client_pool,
       TCPClientPool<RedisTCPClient> *service_15_client_pool,
+      ClientPool<ThriftClient<service_17Client>> *service_17_client_pool,
+      TCPClientPool<RedisTCPClient> *service_20_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_14_client_pool = service_14_client_pool;
     _service_15_client_pool = service_15_client_pool;
+    _service_17_client_pool = service_17_client_pool;
+    _service_20_client_pool = service_20_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
   }
 
@@ -183,6 +272,8 @@ public:
   getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
     return new service_13Handler(_service_14_client_pool,
                                  _service_15_client_pool,
+                                 _service_17_client_pool,
+                                 _service_20_client_pool,
                                  _pointer_chasing_mem_data);
   }
 
@@ -237,11 +328,23 @@ int main(int argc, char *argv[]) {
   TCPClientPool<RedisTCPClient> service_15_client_pool(
       "service_15", service_15_addr, service_15_port, 0, 512, 10000);
 
+  std::string service_17_addr = services_json["service_17"]["server_addr"];
+  int service_17_port = services_json["service_17"]["server_port"];
+  ClientPool<ThriftClient<service_17Client>> service_17_client_pool(
+      "service_17", service_17_addr, service_17_port, 0, 512, 10000, 10000,
+      services_json);
+
+  std::string service_20_addr = services_json["service_20"]["server_addr"];
+  int service_20_port = services_json["service_20"]["server_port"];
+  TCPClientPool<RedisTCPClient> service_20_client_pool(
+      "service_20", service_20_addr, service_20_port, 0, 512, 10000);
+
   int port = services_json["service_13"]["server_port"];
   TThreadedServer server(
       stdcxx::make_shared<service_13ProcessorFactory>(
           stdcxx::make_shared<service_13CloneFactory>(
               &service_14_client_pool, &service_15_client_pool,
+              &service_17_client_pool, &service_20_client_pool,
               pointer_chasing_mem_data)),
       stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
       stdcxx::make_shared<TFramedTransportFactory>(),

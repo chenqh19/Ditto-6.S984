@@ -47,7 +47,7 @@
 #include "../../gen-cpp/service_10.h"
 #include "../../gen-cpp/service_11.h"
 #include "../../gen-cpp/service_13.h"
-#include "../../gen-cpp/service_16.h"
+// #include "../../gen-cpp/service_16.h"
 #include "../../gen-cpp/service_7.h"
 #include "../../gen-cpp/service_9.h"
 
@@ -75,7 +75,7 @@ private:
   ClientPool<ThriftClient<service_10Client>> *_service_10_client_pool;
   ClientPool<ThriftClient<service_11Client>> *_service_11_client_pool;
   ClientPool<ThriftClient<service_13Client>> *_service_13_client_pool;
-  ClientPool<ThriftClient<service_16Client>> *_service_16_client_pool;
+  // ClientPool<ThriftClient<service_16Client>> *_service_16_client_pool;
   uint64_t *_mem_data;
   uint64_t *_curr_mem_addrs;
   uint64_t *_curr_pointer_chasing_mem_addrs;
@@ -89,7 +89,7 @@ public:
       ClientPool<ThriftClient<service_10Client>> *service_10_client_pool,
       ClientPool<ThriftClient<service_11Client>> *service_11_client_pool,
       ClientPool<ThriftClient<service_13Client>> *service_13_client_pool,
-      ClientPool<ThriftClient<service_16Client>> *service_16_client_pool,
+      // ClientPool<ThriftClient<service_16Client>> *service_16_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_1_client_pool = service_1_client_pool;
     _service_7_client_pool = service_7_client_pool;
@@ -97,7 +97,7 @@ public:
     _service_10_client_pool = service_10_client_pool;
     _service_11_client_pool = service_11_client_pool;
     _service_13_client_pool = service_13_client_pool;
-    _service_16_client_pool = service_16_client_pool;
+    // _service_16_client_pool = service_16_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
     _curr_mem_addrs = new uint64_t[17];
     _curr_pointer_chasing_mem_addrs = new uint64_t[17];
@@ -279,30 +279,30 @@ public:
           i.wait();
         }
       }
-      std::map<std::string, std::string> writer_text_map_16;
-      TextMapWriter writer_16(writer_text_map_16);
+      // std::map<std::string, std::string> writer_text_map_16;
+      // TextMapWriter writer_16(writer_text_map_16);
 
-      auto self_span_16 = opentracing::Tracer::Global()->StartSpan(
-          "rpc_16_client", {opentracing::ChildOf(&(span->context()))});
-      opentracing::Tracer::Global()->Inject(self_span_16->context(), writer_16);
-      auto service_16_client_wrapper_16 = _service_16_client_pool->Pop();
-      if (!service_16_client_wrapper_16) {
-        LOG(error) << "ERROR: Failed to connect to service_16";
-        ServiceException se;
-        se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
-        se.message = "Failed to connect to service_16";
-        throw se;
-      } else {
-        auto service_16_client = service_16_client_wrapper_16->GetClient();
-        try {
-          service_16_client->rpc_16(writer_text_map_16);
-          _service_16_client_pool->Keepalive(service_16_client_wrapper_16);
-        } catch (...) {
-          LOG(error) << "ERROR: Failed to send rpc.";
-          _service_16_client_pool->Remove(service_16_client_wrapper_16);
-        }
-      }
-      self_span_16->Finish();
+      // auto self_span_16 = opentracing::Tracer::Global()->StartSpan(
+      //     "rpc_16_client", {opentracing::ChildOf(&(span->context()))});
+      // opentracing::Tracer::Global()->Inject(self_span_16->context(), writer_16);
+      // auto service_16_client_wrapper_16 = _service_16_client_pool->Pop();
+      // if (!service_16_client_wrapper_16) {
+      //   LOG(error) << "ERROR: Failed to connect to service_16";
+      //   ServiceException se;
+      //   se.errorCode = ErrorCode::SE_THRIFT_CONN_ERROR;
+      //   se.message = "Failed to connect to service_16";
+      //   throw se;
+      // } else {
+      //   auto service_16_client = service_16_client_wrapper_16->GetClient();
+      //   try {
+      //     service_16_client->rpc_16(writer_text_map_16);
+      //     _service_16_client_pool->Keepalive(service_16_client_wrapper_16);
+      //   } catch (...) {
+      //     LOG(error) << "ERROR: Failed to send rpc.";
+      //     _service_16_client_pool->Remove(service_16_client_wrapper_16);
+      //   }
+      // }
+      // self_span_16->Finish();
 
     });
 
@@ -395,7 +395,7 @@ private:
   ClientPool<ThriftClient<service_10Client>> *_service_10_client_pool;
   ClientPool<ThriftClient<service_11Client>> *_service_11_client_pool;
   ClientPool<ThriftClient<service_13Client>> *_service_13_client_pool;
-  ClientPool<ThriftClient<service_16Client>> *_service_16_client_pool;
+  // ClientPool<ThriftClient<service_16Client>> *_service_16_client_pool;
   uint64_t *_pointer_chasing_mem_data;
 
 public:
@@ -406,7 +406,7 @@ public:
       ClientPool<ThriftClient<service_10Client>> *service_10_client_pool,
       ClientPool<ThriftClient<service_11Client>> *service_11_client_pool,
       ClientPool<ThriftClient<service_13Client>> *service_13_client_pool,
-      ClientPool<ThriftClient<service_16Client>> *service_16_client_pool,
+      // ClientPool<ThriftClient<service_16Client>> *service_16_client_pool,
       uint64_t *pointer_chasing_mem_data) {
     _service_1_client_pool = service_1_client_pool;
     _service_7_client_pool = service_7_client_pool;
@@ -414,7 +414,7 @@ public:
     _service_10_client_pool = service_10_client_pool;
     _service_11_client_pool = service_11_client_pool;
     _service_13_client_pool = service_13_client_pool;
-    _service_16_client_pool = service_16_client_pool;
+    // _service_16_client_pool = service_16_client_pool;
     _pointer_chasing_mem_data = pointer_chasing_mem_data;
   }
 
@@ -425,7 +425,8 @@ public:
     return new service_0Handler(
         _service_1_client_pool, _service_7_client_pool, _service_9_client_pool,
         _service_10_client_pool, _service_11_client_pool,
-        _service_13_client_pool, _service_16_client_pool,
+        _service_13_client_pool, 
+        // _service_16_client_pool,
         _pointer_chasing_mem_data);
   }
 
@@ -506,11 +507,11 @@ int main(int argc, char *argv[]) {
       "service_13", service_13_addr, service_13_port, 0, 512, 10000, 10000,
       services_json);
 
-  std::string service_16_addr = services_json["service_16"]["server_addr"];
-  int service_16_port = services_json["service_16"]["server_port"];
-  ClientPool<ThriftClient<service_16Client>> service_16_client_pool(
-      "service_16", service_16_addr, service_16_port, 0, 512, 10000, 10000,
-      services_json);
+  // std::string service_16_addr = services_json["service_16"]["server_addr"];
+  // int service_16_port = services_json["service_16"]["server_port"];
+  // ClientPool<ThriftClient<service_16Client>> service_16_client_pool(
+  //     "service_16", service_16_addr, service_16_port, 0, 512, 10000, 10000,
+  //     services_json);
 
   int port = services_json["service_0"]["server_port"];
   TThreadedServer server(
@@ -519,7 +520,8 @@ int main(int argc, char *argv[]) {
               &service_1_client_pool, &service_7_client_pool,
               &service_9_client_pool, &service_10_client_pool,
               &service_11_client_pool, &service_13_client_pool,
-              &service_16_client_pool, pointer_chasing_mem_data)),
+              // &service_16_client_pool, 
+              pointer_chasing_mem_data)),
       stdcxx::make_shared<TServerSocket>("0.0.0.0", port),
       stdcxx::make_shared<TFramedTransportFactory>(),
       stdcxx::make_shared<TBinaryProtocolFactory>());

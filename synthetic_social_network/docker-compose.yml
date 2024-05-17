@@ -127,14 +127,14 @@ services:
     volumes:
       - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
-  service_16:
-    image: ml2585/synthetic_social_network:tcp
-    hostname: service_16
-    restart: always
-    init: true
-    entrypoint: service_16
-    volumes:
-      - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
+  # service_16:
+  #   image: ml2585/synthetic_social_network:tcp
+  #   hostname: service_16
+  #   restart: always
+  #   init: true
+  #   entrypoint: service_16
+  #   volumes:
+  #     - /users/chenqh23/Ditto-6.S984/synthetic_social_network/config/:/auto_microservices/config
 
   service_11:
     image: ml2585/synthetic_social_network:tcp
