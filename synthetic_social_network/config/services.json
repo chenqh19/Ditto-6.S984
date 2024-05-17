@@ -3,151 +3,16 @@
     "server_addr" : "service_0",
     "server_port" : 9000,
     "rpcs_receive" : [0],
-    "rpcs_send" : [1,7,9,10,11,13,16],
+    "rpcs_send" : [16],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
-  },
-  "service_1" : {
-    "server_addr" : "service_1",
-    "server_port" : 9000,
-    "rpcs_receive" : [1],
-    "rpcs_send" : [2,4],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_2" : {
-    "server_addr" : "service_2",
-    "server_port" : 9000,
-    "rpcs_receive" : [2],
-    "rpcs_send" : [3],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_3" : {
-    "server_addr" : "service_3",
-    "server_port" : 9000,
-    "rpcs_receive" : [3],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_4" : {
-    "server_addr" : "service_4",
-    "server_port" : 9000,
-    "rpcs_receive" : [4],
-    "rpcs_send" : [5,6],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_5" : {
-    "server_addr" : "service_5",
-    "server_port" : 9000,
-    "rpcs_receive" : [5],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "memcached"
-  },
-  "service_6" : {
-    "server_addr" : "service_6",
-    "server_port" : 9000,
-    "rpcs_receive" : [6],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_7" : {
-    "server_addr" : "service_7",
-    "server_port" : 9000,
-    "rpcs_receive" : [7],
-    "rpcs_send" : [8],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_8" : {
-    "server_addr" : "service_8",
-    "server_port" : 9000,
-    "rpcs_receive" : [8],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_9" : {
-    "server_addr" : "service_9",
-    "server_port" : 9000,
-    "rpcs_receive" : [9],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_10" : {
-    "server_addr" : "service_10",
-    "server_port" : 9000,
-    "rpcs_receive" : [10],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_11" : {
-    "server_addr" : "service_11",
-    "server_port" : 9000,
-    "rpcs_receive" : [11],
-    "rpcs_send" : [12],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_12" : {
-    "server_addr" : "service_12",
-    "server_port" : 9000,
-    "rpcs_receive" : [12],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_13" : {
-    "server_addr" : "service_13",
-    "server_port" : 9000,
-    "rpcs_receive" : [13],
-    "rpcs_send" : [14,15],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "threaded"
-  },
-  "service_14" : {
-    "server_addr" : "service_14",
-    "server_port" : 9000,
-    "rpcs_receive" : [14],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_15" : {
-    "server_addr" : "service_15",
-    "server_port" : 9000,
-    "rpcs_receive" : [15],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "redis"
   },
   "service_16" : {
     "server_addr" : "service_16",
     "server_port" : 9000,
     "rpcs_receive" : [16],
-    "rpcs_send" : [17,20],
+    "rpcs_send" : [17],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
@@ -156,7 +21,7 @@
     "server_addr" : "service_17",
     "server_port" : 9000,
     "rpcs_receive" : [17],
-    "rpcs_send" : [18,19],
+    "rpcs_send" : [18],
     "scaler" : 1,
     "replica" : 1,
     "server_type" : "threaded"
@@ -165,24 +30,6 @@
     "server_addr" : "service_18",
     "server_port" : 9000,
     "rpcs_receive" : [18],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "redis"
-  },
-  "service_19" : {
-    "server_addr" : "service_19",
-    "server_port" : 9000,
-    "rpcs_receive" : [19],
-    "rpcs_send" : [],
-    "scaler" : 1,
-    "replica" : 1,
-    "server_type" : "mongod"
-  },
-  "service_20" : {
-    "server_addr" : "service_20",
-    "server_port" : 9000,
-    "rpcs_receive" : [20],
     "rpcs_send" : [],
     "scaler" : 1,
     "replica" : 1,
